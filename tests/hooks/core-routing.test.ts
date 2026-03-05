@@ -191,7 +191,7 @@ describe("routePreToolUse", () => {
   describe("MCP execute tools", () => {
     it("passes through non-shell execute", () => {
       const result = routePreToolUse(
-        "mcp__plugin_context-mode_context-mode__execute",
+        "mcp__plugin_context-mode_context-mode__ctx_execute",
         { language: "javascript", code: "console.log('hello')" },
       );
       expect(result).toBeNull();
@@ -199,7 +199,7 @@ describe("routePreToolUse", () => {
 
     it("passes through execute_file without security", () => {
       const result = routePreToolUse(
-        "mcp__plugin_context-mode_context-mode__execute_file",
+        "mcp__plugin_context-mode_context-mode__ctx_execute_file",
         {
           path: "/some/file.log",
           language: "python",
@@ -211,7 +211,7 @@ describe("routePreToolUse", () => {
 
     it("passes through batch_execute without security", () => {
       const result = routePreToolUse(
-        "mcp__plugin_context-mode_context-mode__batch_execute",
+        "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
         {
           commands: [{ label: "test", command: "ls -la" }],
           queries: ["file list"],

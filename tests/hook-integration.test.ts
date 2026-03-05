@@ -355,7 +355,7 @@ describe("Security Policy Enforcement", () => {
   test("Security: MCP execute + shell + sudo denied", () => {
     const result = runHook(
       {
-        tool_name: "mcp__plugin_context-mode_context-mode__execute",
+        tool_name: "mcp__plugin_context-mode_context-mode__ctx_execute",
         tool_input: { language: "shell", code: "sudo rm -rf /" },
       },
       secEnv,
@@ -368,7 +368,7 @@ describe("Security Policy Enforcement", () => {
   test("Security: MCP execute + python (non-shell) passthrough", () => {
     const result = runHook(
       {
-        tool_name: "mcp__plugin_context-mode_context-mode__execute",
+        tool_name: "mcp__plugin_context-mode_context-mode__ctx_execute",
         tool_input: { language: "python", code: "print('hello')" },
       },
       secEnv,
@@ -380,7 +380,7 @@ describe("Security Policy Enforcement", () => {
   test("Security: MCP execute_file + .env path denied", () => {
     const result = runHook(
       {
-        tool_name: "mcp__plugin_context-mode_context-mode__execute_file",
+        tool_name: "mcp__plugin_context-mode_context-mode__ctx_execute_file",
         tool_input: { path: ".env", language: "shell", code: "cat" },
       },
       secEnv,
@@ -394,7 +394,7 @@ describe("Security Policy Enforcement", () => {
   test("Security: MCP execute_file + safe path passthrough", () => {
     const result = runHook(
       {
-        tool_name: "mcp__plugin_context-mode_context-mode__execute_file",
+        tool_name: "mcp__plugin_context-mode_context-mode__ctx_execute_file",
         tool_input: { path: "src/app.ts", language: "javascript", code: "console.log('ok')" },
       },
       secEnv,
@@ -406,7 +406,7 @@ describe("Security Policy Enforcement", () => {
   test("Security: MCP execute_file + safe path but sudo in shell code denied", () => {
     const result = runHook(
       {
-        tool_name: "mcp__plugin_context-mode_context-mode__execute_file",
+        tool_name: "mcp__plugin_context-mode_context-mode__ctx_execute_file",
         tool_input: { path: "src/app.sh", language: "shell", code: "sudo rm -rf /" },
       },
       secEnv,
@@ -419,7 +419,7 @@ describe("Security Policy Enforcement", () => {
   test("Security: MCP batch_execute with sudo in one command denied", () => {
     const result = runHook(
       {
-        tool_name: "mcp__plugin_context-mode_context-mode__batch_execute",
+        tool_name: "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
         tool_input: {
           commands: [
             { label: "list", command: "ls -la" },
@@ -437,7 +437,7 @@ describe("Security Policy Enforcement", () => {
   test("Security: MCP batch_execute with all allowed commands passthrough", () => {
     const result = runHook(
       {
-        tool_name: "mcp__plugin_context-mode_context-mode__batch_execute",
+        tool_name: "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
         tool_input: {
           commands: [
             { label: "list", command: "ls -la" },

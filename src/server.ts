@@ -318,7 +318,7 @@ export function extractSnippet(
 // ─────────────────────────────────────────────────────────
 
 server.registerTool(
-  "execute",
+  "ctx_execute",
   {
     title: "Execute Code",
     description: `MANDATORY: Use for any command where output exceeds 20 lines. Execute code in a sandboxed subprocess. Only stdout enters context — raw data stays in the subprocess.${bunNote} Available: ${langList}.\n\nPREFER THIS OVER BASH for: API calls (gh, curl, aws), test runners (npm test, pytest), git queries (git log, git diff), data processing, and ANY CLI command that may produce large output. Bash should only be used for file mutations, git writes, and navigation.`,
@@ -396,7 +396,7 @@ if(__cm_net>0)process.stderr.write('__CM_NET__:'+__cm_net+'\\n');
       }
 
       if (result.timedOut) {
-        return trackResponse("execute", {
+        return trackResponse("ctx_execute", {
           content: [
             {
               type: "text" as const,
@@ -411,14 +411,14 @@ if(__cm_net>0)process.stderr.write('__CM_NET__:'+__cm_net+'\\n');
         const output = `Exit code: ${result.exitCode}\n\nstdout:\n${result.stdout}\n\nstderr:\n${result.stderr}`;
         if (intent && intent.trim().length > 0 && Buffer.byteLength(output) > INTENT_SEARCH_THRESHOLD) {
           trackIndexed(Buffer.byteLength(output));
-          return trackResponse("execute", {
+          return trackResponse("ctx_execute", {
             content: [
               { type: "text" as const, text: intentSearch(output, intent, `execute:${language}:error`) },
             ],
             isError: true,
           });
         }
-        return trackResponse("execute", {
+        return trackResponse("ctx_execute", {
           content: [
             { type: "text" as const, text: output },
           ],
@@ -431,21 +431,21 @@ if(__cm_net>0)process.stderr.write('__CM_NET__:'+__cm_net+'\\n');
       // Intent-driven search: if intent provided and output is large enough
       if (intent && intent.trim().length > 0 && Buffer.byteLength(stdout) > INTENT_SEARCH_THRESHOLD) {
         trackIndexed(Buffer.byteLength(stdout));
-        return trackResponse("execute", {
+        return trackResponse("ctx_execute", {
           content: [
             { type: "text" as const, text: intentSearch(stdout, intent, `execute:${language}`) },
           ],
         });
       }
 
-      return trackResponse("execute", {
+      return trackResponse("ctx_execute", {
         content: [
           { type: "text" as const, text: stdout },
         ],
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return trackResponse("execute", {
+      return trackResponse("ctx_execute", {
         content: [
           { type: "text" as const, text: `Runtime error: ${message}` },
         ],
@@ -543,7 +543,7 @@ function intentSearch(
 // ─────────────────────────────────────────────────────────
 
 server.registerTool(
-  "execute_file",
+  "ctx_execute_file",
   {
     title: "Execute File Processing",
     description:
@@ -609,7 +609,7 @@ server.registerTool(
       });
 
       if (result.timedOut) {
-        return trackResponse("execute_file", {
+        return trackResponse("ctx_execute_file", {
           content: [
             {
               type: "text" as const,
@@ -624,14 +624,14 @@ server.registerTool(
         const output = `Error processing ${path} (exit ${result.exitCode}):\n${result.stderr || result.stdout}`;
         if (intent && intent.trim().length > 0 && Buffer.byteLength(output) > INTENT_SEARCH_THRESHOLD) {
           trackIndexed(Buffer.byteLength(output));
-          return trackResponse("execute_file", {
+          return trackResponse("ctx_execute_file", {
             content: [
               { type: "text" as const, text: intentSearch(output, intent, `file:${path}:error`) },
             ],
             isError: true,
           });
         }
-        return trackResponse("execute_file", {
+        return trackResponse("ctx_execute_file", {
           content: [
             { type: "text" as const, text: output },
           ],
@@ -643,21 +643,21 @@ server.registerTool(
 
       if (intent && intent.trim().length > 0 && Buffer.byteLength(stdout) > INTENT_SEARCH_THRESHOLD) {
         trackIndexed(Buffer.byteLength(stdout));
-        return trackResponse("execute_file", {
+        return trackResponse("ctx_execute_file", {
           content: [
             { type: "text" as const, text: intentSearch(stdout, intent, `file:${path}`) },
           ],
         });
       }
 
-      return trackResponse("execute_file", {
+      return trackResponse("ctx_execute_file", {
         content: [
           { type: "text" as const, text: stdout },
         ],
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return trackResponse("execute_file", {
+      return trackResponse("ctx_execute_file", {
         content: [
           { type: "text" as const, text: `Runtime error: ${message}` },
         ],
@@ -672,7 +672,7 @@ server.registerTool(
 // ─────────────────────────────────────────────────────────
 
 server.registerTool(
-  "index",
+  "ctx_index",
   {
     title: "Index Content",
     description:
@@ -711,7 +711,7 @@ server.registerTool(
   },
   async ({ content, path, source }) => {
     if (!content && !path) {
-      return trackResponse("index", {
+      return trackResponse("ctx_index", {
         content: [
           {
             type: "text" as const,
@@ -734,7 +734,7 @@ server.registerTool(
       const store = getStore();
       const result = store.index({ content, path, source });
 
-      return trackResponse("index", {
+      return trackResponse("ctx_index", {
         content: [
           {
             type: "text" as const,
@@ -744,7 +744,7 @@ server.registerTool(
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return trackResponse("index", {
+      return trackResponse("ctx_index", {
         content: [
           { type: "text" as const, text: `Index error: ${message}` },
         ],
@@ -766,7 +766,7 @@ const SEARCH_MAX_RESULTS_AFTER = 3; // after 3 calls: 1 result per query
 const SEARCH_BLOCK_AFTER = 8; // after 8 calls: refuse, demand batching
 
 server.registerTool(
-  "search",
+  "ctx_search",
   {
     title: "Search Indexed Content",
     description:
@@ -802,7 +802,7 @@ server.registerTool(
       }
 
       if (queryList.length === 0) {
-        return trackResponse("search", {
+        return trackResponse("ctx_search", {
           content: [{ type: "text" as const, text: "Error: provide query or queries." }],
           isError: true,
         });
@@ -820,7 +820,7 @@ server.registerTool(
 
       // After SEARCH_BLOCK_AFTER calls: refuse
       if (searchCallCount > SEARCH_BLOCK_AFTER) {
-        return trackResponse("search", {
+        return trackResponse("ctx_search", {
           content: [{
             type: "text" as const,
             text: `BLOCKED: ${searchCallCount} search calls in ${Math.round((now - searchWindowStart) / 1000)}s. ` +
@@ -880,17 +880,17 @@ server.registerTool(
         const sourceList = sources.length > 0
           ? `\nIndexed sources: ${sources.map((s) => `"${s.label}" (${s.chunkCount} sections)`).join(", ")}`
           : "";
-        return trackResponse("search", {
+        return trackResponse("ctx_search", {
           content: [{ type: "text" as const, text: `No results found.${sourceList}` }],
         });
       }
 
-      return trackResponse("search", {
+      return trackResponse("ctx_search", {
         content: [{ type: "text" as const, text: output }],
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return trackResponse("search", {
+      return trackResponse("ctx_search", {
         content: [{ type: "text" as const, text: `Search error: ${message}` }],
         isError: true,
       });
@@ -977,7 +977,7 @@ main();
 }
 
 server.registerTool(
-  "fetch_and_index",
+  "ctx_fetch_and_index",
   {
     title: "Fetch & Index URL",
     description:
@@ -1006,7 +1006,7 @@ server.registerTool(
       });
 
       if (result.exitCode !== 0) {
-        return trackResponse("fetch_and_index", {
+        return trackResponse("ctx_fetch_and_index", {
           content: [
             {
               type: "text" as const,
@@ -1026,7 +1026,7 @@ server.registerTool(
       const markdown = content.trim();
 
       if (markdown.length === 0) {
-        return trackResponse("fetch_and_index", {
+        return trackResponse("ctx_fetch_and_index", {
           content: [
             {
               type: "text" as const,
@@ -1066,12 +1066,12 @@ server.registerTool(
         preview,
       ].join("\n");
 
-      return trackResponse("fetch_and_index", {
+      return trackResponse("ctx_fetch_and_index", {
         content: [{ type: "text" as const, text }],
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return trackResponse("fetch_and_index", {
+      return trackResponse("ctx_fetch_and_index", {
         content: [
           { type: "text" as const, text: `Fetch error: ${message}` },
         ],
@@ -1086,7 +1086,7 @@ server.registerTool(
 // ─────────────────────────────────────────────────────────
 
 server.registerTool(
-  "batch_execute",
+  "ctx_batch_execute",
   {
     title: "Batch Execute & Search",
     description:
@@ -1151,7 +1151,7 @@ server.registerTool(
       });
 
       if (result.timedOut) {
-        return trackResponse("batch_execute", {
+        return trackResponse("ctx_batch_execute", {
           content: [
             {
               type: "text" as const,
@@ -1240,12 +1240,12 @@ server.registerTool(
           : "",
       ].join("\n");
 
-      return trackResponse("batch_execute", {
+      return trackResponse("ctx_batch_execute", {
         content: [{ type: "text" as const, text: output }],
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return trackResponse("batch_execute", {
+      return trackResponse("ctx_batch_execute", {
         content: [
           {
             type: "text" as const,
@@ -1263,7 +1263,7 @@ server.registerTool(
 // ─────────────────────────────────────────────────────────
 
 server.registerTool(
-  "stats",
+  "ctx_stats",
   {
     title: "Session Statistics",
     description:
@@ -1473,7 +1473,7 @@ server.registerTool(
     );
 
     const text = lines.join("\n");
-    return trackResponse("stats", {
+    return trackResponse("ctx_stats", {
       content: [{ type: "text" as const, text }],
     });
   },
@@ -1481,7 +1481,7 @@ server.registerTool(
 
 // ── ctx-doctor: diagnostics meta-tool ──────────────────────────────────────
 server.registerTool(
-  "doctor",
+  "ctx_doctor",
   {
     title: "Run Diagnostics",
     description:
@@ -1517,7 +1517,7 @@ server.registerTool(
       "  ```",
     ].join("\n");
 
-    return trackResponse("doctor", {
+    return trackResponse("ctx_doctor", {
       content: [{ type: "text" as const, text }],
     });
   },
@@ -1525,7 +1525,7 @@ server.registerTool(
 
 // ── ctx-upgrade: upgrade meta-tool ─────────────────────────────────────────
 server.registerTool(
-  "upgrade",
+  "ctx_upgrade",
   {
     title: "Upgrade Plugin",
     description:
@@ -1562,7 +1562,7 @@ server.registerTool(
       "- Tell the user to restart their session to pick up the new version.",
     ].join("\n");
 
-    return trackResponse("upgrade", {
+    return trackResponse("ctx_upgrade", {
       content: [{ type: "text" as const, text }],
     });
   },

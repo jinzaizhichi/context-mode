@@ -9,9 +9,10 @@
  */
 
 import { readStdin, getSessionId, getSessionDBPath } from "./session-helpers.mjs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const HOOK_DIR = new URL(".", import.meta.url).pathname;
+const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 const PKG_SESSION = join(HOOK_DIR, "..", "build", "session");
 
 try {

@@ -17,6 +17,7 @@ import color from "picocolors";
 import { execSync } from "node:child_process";
 import { readFileSync, cpSync, accessSync, readdirSync, rmSync, constants } from "node:fs";
 import { resolve, dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   detectRuntimes,
@@ -372,7 +373,7 @@ async function upgrade() {
   // Step 1: Pull latest from GitHub
   p.log.step("Pulling latest from GitHub...");
   const localVersion = getLocalVersion();
-  const tmpDir = `/tmp/context-mode-upgrade-${Date.now()}`;
+  const tmpDir = join(tmpdir(), `context-mode-upgrade-${Date.now()}`);
 
   s.start("Cloning mksglu/claude-context-mode");
   try {

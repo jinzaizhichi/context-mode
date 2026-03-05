@@ -65,7 +65,7 @@ See [`docs/platform-support.md`](docs/platform-support.md) for the full capabili
 **Step 2 — Restart Claude Code.**
 
 That's it. The plugin installs everything automatically:
-- MCP server with 6 sandbox tools (`batch_execute`, `execute`, `execute_file`, `index`, `search`, `fetch_and_index`)
+- MCP server with 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`)
 - PreToolUse hooks that intercept Bash, Read, WebFetch, Grep, and Task calls — nudging them toward sandbox execution
 - PostToolUse, PreCompact, and SessionStart hooks for session tracking and context injection
 - A `CLAUDE.md` routing instructions file auto-created in your project root
@@ -260,19 +260,19 @@ Global `~/.codex/AGENTS.md` applies to all projects. Project-level `./AGENTS.md`
 
 | Tool | What it does | Context saved |
 |---|---|---|
-| `batch_execute` | Run multiple commands + search multiple queries in ONE call. | 986 KB → 62 KB |
-| `execute` | Run code in 11 languages. Only stdout enters context. | 56 KB → 299 B |
-| `execute_file` | Process files in sandbox. Raw content never leaves. | 45 KB → 155 B |
-| `index` | Chunk markdown into FTS5 with BM25 ranking. | 60 KB → 40 B |
-| `search` | Query indexed content with multiple queries in one call. | On-demand retrieval |
-| `fetch_and_index` | Fetch URL, detect content type (HTML/JSON/text), chunk and index. | 60 KB → 40 B |
-| `stats` | Show context savings, call counts, and session statistics. | — |
-| `doctor` | Diagnose installation: runtimes, hooks, FTS5, versions. | — |
-| `upgrade` | Upgrade to latest version from GitHub, rebuild, reconfigure hooks. | — |
+| `ctx_batch_execute` | Run multiple commands + search multiple queries in ONE call. | 986 KB → 62 KB |
+| `ctx_execute` | Run code in 11 languages. Only stdout enters context. | 56 KB → 299 B |
+| `ctx_execute_file` | Process files in sandbox. Raw content never leaves. | 45 KB → 155 B |
+| `ctx_index` | Chunk markdown into FTS5 with BM25 ranking. | 60 KB → 40 B |
+| `ctx_search` | Query indexed content with multiple queries in one call. | On-demand retrieval |
+| `ctx_fetch_and_index` | Fetch URL, detect content type (HTML/JSON/text), chunk and index. | 60 KB → 40 B |
+| `ctx_stats` | Show context savings, call counts, and session statistics. | — |
+| `ctx_doctor` | Diagnose installation: runtimes, hooks, FTS5, versions. | — |
+| `ctx_upgrade` | Upgrade to latest version from GitHub, rebuild, reconfigure hooks. | — |
 
 ## How the Sandbox Works
 
-Each `execute` call spawns an isolated subprocess with its own process boundary. Scripts can't access each other's memory or state. The subprocess runs your code, captures stdout, and only that stdout enters the conversation context. The raw data — log files, API responses, snapshots — never leaves the sandbox.
+Each `ctx_execute` call spawns an isolated subprocess with its own process boundary. Scripts can't access each other's memory or state. The subprocess runs your code, captures stdout, and only that stdout enters the conversation context. The raw data — log files, API responses, snapshots — never leaves the sandbox.
 
 Eleven language runtimes are available: JavaScript, TypeScript, Python, Shell, Ruby, Go, Rust, PHP, Perl, R, and Elixir. Bun is auto-detected for 3-5x faster JS/TS execution.
 
@@ -282,9 +282,9 @@ When output exceeds 5 KB and an `intent` is provided, Context Mode switches to i
 
 ## How the Knowledge Base Works
 
-The `index` tool chunks markdown content by headings while keeping code blocks intact, then stores them in a **SQLite FTS5** (Full-Text Search 5) virtual table. Search uses **BM25 ranking** — a probabilistic relevance algorithm that scores documents based on term frequency, inverse document frequency, and document length normalization. **Porter stemming** is applied at index time so "running", "runs", and "ran" match the same stem.
+The `ctx_index` tool chunks markdown content by headings while keeping code blocks intact, then stores them in a **SQLite FTS5** (Full-Text Search 5) virtual table. Search uses **BM25 ranking** — a probabilistic relevance algorithm that scores documents based on term frequency, inverse document frequency, and document length normalization. **Porter stemming** is applied at index time so "running", "runs", and "ran" match the same stem.
 
-When you call `search`, it returns relevant content snippets focused around matching query terms — not full documents, not approximations, the actual indexed content with smart extraction around what you're looking for. `fetch_and_index` extends this to URLs: fetch, convert HTML to markdown, chunk, index. The raw page never enters context.
+When you call `ctx_search`, it returns relevant content snippets focused around matching query terms — not full documents, not approximations, the actual indexed content with smart extraction around what you're looking for. `ctx_fetch_and_index` extends this to URLs: fetch, convert HTML to markdown, chunk, index. The raw page never enters context.
 
 ### Fuzzy Search
 
@@ -302,7 +302,7 @@ Search results use intelligent extraction instead of truncation. Instead of retu
 
 - **Calls 1-3:** Normal results (2 per query)
 - **Calls 4-8:** Reduced results (1 per query) + warning
-- **Calls 9+:** Blocked — redirects to `batch_execute`
+- **Calls 9+:** Blocked — redirects to `ctx_batch_execute`
 
 ## Session Continuity
 
@@ -473,9 +473,17 @@ Fetch the React useEffect docs, index them, and find the cleanup pattern
 with code examples. Then run /context-mode:ctx-stats.
 ```
 
+**Session continuity** — compaction recovery with full state
+```
+Start a multi-step task: "Create a REST API with Express — add routes, tests,
+and error handling." After 20+ tool calls, type: ctx stats to see the session
+event count. When context compacts, the model continues from your last prompt
+with tasks, files, and decisions intact — no re-prompting needed.
+```
+
 ## Security
 
-Context Mode enforces the same permission rules you already use — but extends them to the MCP sandbox. If you block `sudo`, it's also blocked inside `execute`, `execute_file`, and `batch_execute`.
+Context Mode enforces the same permission rules you already use — but extends them to the MCP sandbox. If you block `sudo`, it's also blocked inside `ctx_execute`, `ctx_execute_file`, and `ctx_batch_execute`.
 
 **Zero setup required.** If you haven't configured any permissions, nothing changes. This only activates when you add rules.
 
@@ -496,6 +504,8 @@ Context Mode enforces the same permission rules you already use — but extends 
 }
 ```
 
+Add this to your project's `.claude/settings.json` (or `~/.claude/settings.json` for global rules). All platforms read security policies from Claude Code's settings format — even on Gemini CLI, VS Code Copilot, and OpenCode. Codex CLI has no hook support, so security enforcement is not available.
+
 The pattern is `Tool(what to match)` where `*` means "anything".
 
 Commands chained with `&&`, `;`, or `|` are split — each part is checked separately. `echo hello && sudo rm -rf /tmp` is blocked because the `sudo` part matches the deny rule.
@@ -510,16 +520,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and TDD guid
 git clone https://github.com/mksglu/claude-context-mode.git
 cd claude-context-mode && npm install && npm test
 ```
-
-## Contributors
-
-<a href="https://github.com/mksglu/claude-context-mode/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=mksglu/claude-context-mode&columns=8&anon=1" />
-</a>
-
-### Special Thanks
-
-<a href="https://github.com/mksglu/claude-context-mode/issues/15"><img src="https://github.com/vaban-ru.png" width="32" /></a>
 
 ## License
 

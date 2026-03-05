@@ -9,10 +9,11 @@
 
 import { readStdin, getSessionId, getSessionDBPath, VSCODE_OPTS } from "../session-helpers.mjs";
 import { appendFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 
-const HOOK_DIR = new URL(".", import.meta.url).pathname;
+const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 const PKG_SESSION = join(HOOK_DIR, "..", "..", "build", "session");
 const OPTS = VSCODE_OPTS;
 const DEBUG_LOG = join(homedir(), ".vscode", "context-mode", "precompact-debug.log");

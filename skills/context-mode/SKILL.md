@@ -1,7 +1,7 @@
 ---
 name: context-mode
 description: |
-  Use context-mode tools (execute, execute_file) instead of Bash/cat when processing
+  Use context-mode tools (ctx_execute, ctx_execute_file) instead of Bash/cat when processing
   large outputs. Trigger phrases: "analyze logs", "summarize output", "process data",
   "parse JSON", "filter results", "extract errors", "check build output",
   "analyze dependencies", "process API response", "large file analysis",
@@ -37,7 +37,7 @@ Bash whitelist (safe to run directly):
 - **Package management**: `npm install`, `npm publish`, `pip install`
 - **Simple output**: `echo`, `printf`
 
-**Everything else → `execute` or `execute_file`.** Any command that reads, queries, fetches, lists, logs, tests, builds, diffs, inspects, or calls an external service. This includes ALL CLIs (gh, aws, kubectl, docker, terraform, wrangler, fly, heroku, gcloud, etc.) — there are thousands and we cannot list them all.
+**Everything else → `ctx_execute` or `ctx_execute_file`.** Any command that reads, queries, fetches, lists, logs, tests, builds, diffs, inspects, or calls an external service. This includes ALL CLIs (gh, aws, kubectl, docker, terraform, wrangler, fly, heroku, gcloud, etc.) — there are thousands and we cannot list them all.
 
 **When uncertain, use context-mode.** Every KB of unnecessary context reduces the quality and speed of the entire session.
 
@@ -50,16 +50,16 @@ About to run a command / read a file / call an API?
 │   └── Use Bash
 │
 ├── Output MIGHT be large or you're UNSURE?
-│   └── Use context-mode execute or execute_file
+│   └── Use context-mode ctx_execute or ctx_execute_file
 │
 ├── Fetching web documentation or HTML page?
-│   └── Use fetch_and_index → search
+│   └── Use ctx_fetch_and_index → ctx_search
 │
 ├── Using Playwright (navigate, snapshot, console, network)?
 │   └── ALWAYS use filename parameter to save to file, then:
-│       browser_snapshot(filename) → index(path) or execute_file(path)
-│       browser_console_messages(filename) → execute_file(path)
-│       browser_network_requests(filename) → execute_file(path)
+│       browser_snapshot(filename) → ctx_index(path) or ctx_execute_file(path)
+│       browser_console_messages(filename) → ctx_execute_file(path)
+│       browser_network_requests(filename) → ctx_execute_file(path)
 │       ⚠ browser_navigate returns a snapshot automatically — ignore it,
 │         use browser_snapshot(filename) for any inspection.
 │       ⚠ Playwright MCP uses a SINGLE browser instance — NOT parallel-safe.
@@ -74,34 +74,34 @@ About to run a command / read a file / call an API?
 │
 ├── Processing output from another MCP tool (Context7, GitHub API, etc.)?
 │   ├── Output already in context from a previous tool call?
-│   │   └── Use it directly. Do NOT re-index with index(content: ...).
+│   │   └── Use it directly. Do NOT re-index with ctx_index(content: ...).
 │   ├── Need to search the output multiple times?
-│   │   └── Save to file via execute, then index(path) → search
+│   │   └── Save to file via ctx_execute, then ctx_index(path) → ctx_search
 │   └── One-shot extraction?
-│       └── Save to file via execute, then execute_file(path)
+│       └── Save to file via ctx_execute, then ctx_execute_file(path)
 │
 └── Reading a file to analyze/summarize (not edit)?
-    └── Use execute_file (file loads into FILE_CONTENT, not context)
+    └── Use ctx_execute_file (file loads into FILE_CONTENT, not context)
 ```
 
 ## When to Use Each Tool
 
 | Situation | Tool | Example |
 |-----------|------|---------|
-| Hit an API endpoint | `execute` | `fetch('http://localhost:3000/api/orders')` |
-| Run CLI that returns data | `execute` | `gh pr list`, `aws s3 ls`, `kubectl get pods` |
-| Run tests | `execute` | `npm test`, `pytest`, `go test ./...` |
-| Git operations | `execute` | `git log --oneline -50`, `git diff HEAD~5` |
-| Docker/K8s inspection | `execute` | `docker stats --no-stream`, `kubectl describe pod` |
-| Read a log file | `execute_file` | Parse access.log, error.log, build output |
-| Read a data file | `execute_file` | Analyze CSV, JSON, YAML, XML |
-| Read source code to analyze | `execute_file` | Count functions, find patterns, extract metrics |
-| Fetch web docs | `fetch_and_index` | Index React/Next.js/Zod docs, then search |
-| Playwright snapshot | `browser_snapshot(filename)` → `index(path)` → `search` | Save to file, index server-side, query |
-| Playwright snapshot (one-shot) | `browser_snapshot(filename)` → `execute_file(path)` | Save to file, extract in sandbox |
-| Playwright console/network | `browser_*(filename)` → `execute_file(path)` | Save to file, analyze in sandbox |
+| Hit an API endpoint | `ctx_execute` | `fetch('http://localhost:3000/api/orders')` |
+| Run CLI that returns data | `ctx_execute` | `gh pr list`, `aws s3 ls`, `kubectl get pods` |
+| Run tests | `ctx_execute` | `npm test`, `pytest`, `go test ./...` |
+| Git operations | `ctx_execute` | `git log --oneline -50`, `git diff HEAD~5` |
+| Docker/K8s inspection | `ctx_execute` | `docker stats --no-stream`, `kubectl describe pod` |
+| Read a log file | `ctx_execute_file` | Parse access.log, error.log, build output |
+| Read a data file | `ctx_execute_file` | Analyze CSV, JSON, YAML, XML |
+| Read source code to analyze | `ctx_execute_file` | Count functions, find patterns, extract metrics |
+| Fetch web docs | `ctx_fetch_and_index` | Index React/Next.js/Zod docs, then search |
+| Playwright snapshot | `browser_snapshot(filename)` → `ctx_index(path)` → `ctx_search` | Save to file, index server-side, query |
+| Playwright snapshot (one-shot) | `browser_snapshot(filename)` → `ctx_execute_file(path)` | Save to file, extract in sandbox |
+| Playwright console/network | `browser_*(filename)` → `ctx_execute_file(path)` | Save to file, analyze in sandbox |
 | MCP output (already in context) | Use directly | Don't re-index — it's already loaded |
-| MCP output (need multi-query) | `execute` to save → `index(path)` → `search` | Save to file first, index server-side |
+| MCP output (need multi-query) | `ctx_execute` to save → `ctx_index(path)` → `ctx_search` | Save to file first, index server-side |
 
 ## Automatic Triggers
 
@@ -134,12 +134,12 @@ Use context-mode for ANY of these, without being asked:
 - **Always use `source` parameter** when multiple docs are indexed to avoid cross-source contamination
   - Partial match works: `source: "Node"` matches `"Node.js v22 CHANGELOG"`
 - **Always use `queries` array** — batch ALL search questions in ONE call:
-  - `search(queries: ["transform pipe", "refine superRefine", "coerce codec"], source: "Zod")`
-  - NEVER make multiple separate search() calls — put all queries in one array
+  - `ctx_search(queries: ["transform pipe", "refine superRefine", "coerce codec"], source: "Zod")`
+  - NEVER make multiple separate ctx_search() calls — put all queries in one array
 
 ## External Documentation
 
-- **Always use `fetch_and_index`** for external docs — NEVER `cat` or `execute` with local paths for packages you don't own
+- **Always use `ctx_fetch_and_index`** for external docs — NEVER `cat` or `ctx_execute` with local paths for packages you don't own
 - For GitHub-hosted projects, use the raw URL: `https://raw.githubusercontent.com/org/repo/main/CHANGELOG.md`
 - After indexing, use the `source` parameter in search to scope results to that specific document
 
@@ -150,7 +150,7 @@ Use context-mode for ANY of these, without being asked:
 3. **Be specific in output.** Print bug details with IDs, line numbers, exact values — not just counts.
 4. **For files you need to EDIT**: Use the normal Read tool. context-mode is for analysis, not editing.
 5. **For Bash whitelist commands only**: Use Bash for file mutations, git writes, navigation, process control, package install, and echo. Everything else goes through context-mode.
-6. **Never use `index(content: large_data)`.** Use `index(path: ...)` to read files server-side. The `content` parameter sends data through context as a tool parameter — use it only for small inline text.
+6. **Never use `ctx_index(content: large_data)`.** Use `ctx_index(path: ...)` to read files server-side. The `content` parameter sends data through context as a tool parameter — use it only for small inline text.
 7. **Always use `filename` parameter** on Playwright tools (`browser_snapshot`, `browser_console_messages`, `browser_network_requests`). Without it, the full output enters context.
 8. **Don't re-index data already in context.** If an MCP tool returned data in a previous response, it's already loaded — use it directly or save to file first.
 
@@ -162,7 +162,7 @@ Use context-mode for ANY of these, without being asked:
     NEVER return large raw datasets directly to context.
   </critical_rule>
   <workflow>
-    LargeDataTool(filename: "path") → mcp__context-mode__index(path: "path") → search()
+    LargeDataTool(filename: "path") → mcp__context-mode__ctx_index(path: "path") → ctx_search()
   </workflow>
 </sandboxed_data_workflow>
 
@@ -200,7 +200,7 @@ gh pr list --json number,title,state,reviewDecision --jq '.[] | "\(.number) [\(.
 
 ### Read and analyze a large file
 ```python
-# FILE_CONTENT is pre-loaded by execute_file
+# FILE_CONTENT is pre-loaded by ctx_execute_file
 import json
 data = json.loads(FILE_CONTENT)
 print(f"Records: {len(data)}")
@@ -211,9 +211,9 @@ print(f"Records: {len(data)}")
 
 **When a task involves Playwright snapshots, screenshots, or page inspection, ALWAYS route through file → sandbox.**
 
-Playwright `browser_snapshot` returns 10K–135K tokens of accessibility tree data. Calling it without `filename` dumps all of that into context. Passing the output to `index(content: ...)` sends it into context a SECOND time as a parameter. Both are wrong.
+Playwright `browser_snapshot` returns 10K–135K tokens of accessibility tree data. Calling it without `filename` dumps all of that into context. Passing the output to `ctx_index(content: ...)` sends it into context a SECOND time as a parameter. Both are wrong.
 
-**The key insight**: `browser_snapshot` has a `filename` parameter that saves to file instead of returning to context. `index` has a `path` parameter that reads files server-side. `execute_file` processes files in a sandbox. **None of these touch context.**
+**The key insight**: `browser_snapshot` has a `filename` parameter that saves to file instead of returning to context. `ctx_index` has a `path` parameter that reads files server-side. `ctx_execute_file` processes files in a sandbox. **None of these touch context.**
 
 ### Workflow A: Snapshot → File → Index → Search (multiple queries)
 
@@ -221,10 +221,10 @@ Playwright `browser_snapshot` returns 10K–135K tokens of accessibility tree da
 Step 1: browser_snapshot(filename: "/tmp/playwright-snapshot.md")
         → saves to file, returns ~50B confirmation (NOT 135K tokens)
 
-Step 2: index(path: "/tmp/playwright-snapshot.md", source: "Playwright snapshot")
+Step 2: ctx_index(path: "/tmp/playwright-snapshot.md", source: "Playwright snapshot")
         → reads file SERVER-SIDE, indexes into FTS5, returns ~80B confirmation
 
-Step 3: search(queries: ["login form email password"], source: "Playwright")
+Step 3: ctx_search(queries: ["login form email password"], source: "Playwright")
         → returns only matching chunks (~300B)
 ```
 
@@ -236,7 +236,7 @@ Step 3: search(queries: ["login form email password"], source: "Playwright")
 Step 1: browser_snapshot(filename: "/tmp/playwright-snapshot.md")
         → saves to file, returns ~50B confirmation
 
-Step 2: execute_file(path: "/tmp/playwright-snapshot.md", language: "javascript", code: "
+Step 2: ctx_execute_file(path: "/tmp/playwright-snapshot.md", language: "javascript", code: "
           const links = [...FILE_CONTENT.matchAll(/- link \"([^\"]+)\"/g)].map(m => m[1]);
           const buttons = [...FILE_CONTENT.matchAll(/- button \"([^\"]+)\"/g)].map(m => m[1]);
           const inputs = [...FILE_CONTENT.matchAll(/- textbox|- checkbox|- radio/g)];
@@ -252,10 +252,10 @@ Step 2: execute_file(path: "/tmp/playwright-snapshot.md", language: "javascript"
 
 ```
 browser_console_messages(level: "error", filename: "/tmp/console.md")
-→ execute_file(path: "/tmp/console.md", ...) or index(path: "/tmp/console.md", ...)
+→ ctx_execute_file(path: "/tmp/console.md", ...) or ctx_index(path: "/tmp/console.md", ...)
 
 browser_network_requests(includeStatic: false, filename: "/tmp/network.md")
-→ execute_file(path: "/tmp/network.md", ...) or index(path: "/tmp/network.md", ...)
+→ ctx_execute_file(path: "/tmp/network.md", ...) or ctx_index(path: "/tmp/network.md", ...)
 ```
 
 ### CRITICAL: Why `filename` + `path` is mandatory
@@ -263,16 +263,16 @@ browser_network_requests(includeStatic: false, filename: "/tmp/network.md")
 | Approach | Context cost | Correct? |
 |----------|-------------|----------|
 | `browser_snapshot()` → raw into context | **135K tokens** | NO |
-| `browser_snapshot()` → `index(content: raw)` | **270K tokens** (doubled!) | NO |
-| `browser_snapshot(filename)` → `index(path)` → `search` | **~430B** | YES |
-| `browser_snapshot(filename)` → `execute_file(path)` | **~250B** | YES |
+| `browser_snapshot()` → `ctx_index(content: raw)` | **270K tokens** (doubled!) | NO |
+| `browser_snapshot(filename)` → `ctx_index(path)` → `ctx_search` | **~430B** | YES |
+| `browser_snapshot(filename)` → `ctx_execute_file(path)` | **~250B** | YES |
 
 ### Key Rule
 
 > **ALWAYS use `filename` parameter when calling `browser_snapshot`, `browser_console_messages`, or `browser_network_requests`.**
-> Then process via `index(path: ...)` or `execute_file(path: ...)` — never `index(content: ...)`.
+> Then process via `ctx_index(path: ...)` or `ctx_execute_file(path: ...)` — never `ctx_index(content: ...)`.
 >
-> Data flow: **Playwright → file → server-side read → context**. Never: **Playwright → context → index(content) → context again**.
+> Data flow: **Playwright → file → server-side read → context**. Never: **Playwright → context → ctx_index(content) → context again**.
 
 ## Subagent Usage
 
@@ -280,15 +280,15 @@ Subagents automatically receive context-mode tool routing via a PreToolUse hook.
 
 ## Anti-Patterns
 
-- Using `curl http://api/endpoint` via Bash → 50KB floods context. Use `execute` with fetch instead.
-- Using `cat large-file.json` via Bash → entire file in context. Use `execute_file` instead.
-- Using `gh pr list` via Bash → raw JSON in context. Use `execute` with `--jq` filter instead.
-- Piping Bash output through `| head -20` → you lose the rest. Use `execute` to analyze ALL data and print summary.
-- Running `npm test` via Bash → full test output in context. Use `execute` to capture and summarize.
+- Using `curl http://api/endpoint` via Bash → 50KB floods context. Use `ctx_execute` with fetch instead.
+- Using `cat large-file.json` via Bash → entire file in context. Use `ctx_execute_file` instead.
+- Using `gh pr list` via Bash → raw JSON in context. Use `ctx_execute` with `--jq` filter instead.
+- Piping Bash output through `| head -20` → you lose the rest. Use `ctx_execute` to analyze ALL data and print summary.
+- Running `npm test` via Bash → full test output in context. Use `ctx_execute` to capture and summarize.
 - Calling `browser_snapshot()` WITHOUT `filename` parameter → 135K tokens flood context. **Always** use `browser_snapshot(filename: "/tmp/snap.md")`.
 - Calling `browser_console_messages()` or `browser_network_requests()` WITHOUT `filename` → entire output floods context. **Always** use the `filename` parameter.
-- Passing ANY large data to `index(content: ...)` → data enters context as a parameter. **Always** use `index(path: ...)` to read server-side. The `content` parameter should only be used for small inline text you're composing yourself.
-- Calling an MCP tool (Context7 `query-docs`, GitHub API, etc.) then passing the response to `index(content: response)` → **doubles** context usage. The response is already in context — use it directly or save to file first.
+- Passing ANY large data to `ctx_index(content: ...)` → data enters context as a parameter. **Always** use `ctx_index(path: ...)` to read server-side. The `content` parameter should only be used for small inline text you're composing yourself.
+- Calling an MCP tool (Context7 `query-docs`, GitHub API, etc.) then passing the response to `ctx_index(content: response)` → **doubles** context usage. The response is already in context — use it directly or save to file first.
 - Ignoring `browser_navigate` auto-snapshot → navigation response includes a full page snapshot. Don't rely on it for inspection — call `browser_snapshot(filename)` separately.
 
 ## Reference Files

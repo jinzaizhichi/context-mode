@@ -22,7 +22,7 @@ export function groupEvents(events) {
   const fileNames = new Set();
   for (const ev of (grouped.file || [])) {
     const path = ev.data.includes(" in ") ? ev.data.split(" in ").pop() : ev.data;
-    const base = path?.split("/").pop()?.trim();
+    const base = path?.split(/[/\\]/).pop()?.trim();
     if (base && !base.includes("*")) fileNames.add(base);
   }
   return { grouped, lastPrompt, fileNames };
@@ -251,7 +251,7 @@ export function buildSessionDirective(source, eventMeta) {
     const rPaths = grouped.rule
       .filter(e => e.type !== "rule_content")
       .map(e => {
-        const parts = e.data.split("/");
+        const parts = e.data.split(/[/\\]/);
         return parts.slice(-2).join("/");
       });
     const uniquePaths = [...new Set(rPaths)];
@@ -331,8 +331,8 @@ export function buildSessionDirective(source, eventMeta) {
   // Search on demand — detailed data lives in FTS5
   block += `\n<session_search>`;
   block += `\nDetailed session data is indexed in context-mode FTS5 (source: "session-events").`;
-  block += `\nUse mcp__plugin_context-mode_context-mode__search(queries: [...], source: "session-events") when you need specifics.`;
-  block += `\nDo NOT call index() — data is already indexed.`;
+  block += `\nUse mcp__plugin_context-mode_context-mode__ctx_search(queries: [...], source: "session-events") when you need specifics.`;
+  block += `\nDo NOT call ctx_index() — data is already indexed.`;
   block += `\n</session_search>`;
 
   // Continue instruction
