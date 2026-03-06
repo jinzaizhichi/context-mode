@@ -23,8 +23,9 @@ import {
   getAvailableLanguages,
   hasBunRuntime,
 } from "./runtime.js";
+import { classifyNonZeroExit } from "./exit-classify.js";
 
-const VERSION = "1.0.6";
+const VERSION = "1.0.7";
 
 // Prevent silent server death from unhandled async errors
 process.on("unhandledRejection", (err) => {
@@ -485,21 +486,23 @@ __cm_main().catch(e=>{console.error(e);process.exitCode=1});${background ? '\nse
       }
 
       if (result.exitCode !== 0) {
-        const output = `Exit code: ${result.exitCode}\n\nstdout:\n${result.stdout}\n\nstderr:\n${result.stderr}`;
+        const { isError, output } = classifyNonZeroExit({
+          language, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr,
+        });
         if (intent && intent.trim().length > 0 && Buffer.byteLength(output) > INTENT_SEARCH_THRESHOLD) {
           trackIndexed(Buffer.byteLength(output));
           return trackResponse("ctx_execute", {
             content: [
-              { type: "text" as const, text: intentSearch(output, intent, `execute:${language}:error`) },
+              { type: "text" as const, text: intentSearch(output, intent, isError ? `execute:${language}:error` : `execute:${language}`) },
             ],
-            isError: true,
+            isError,
           });
         }
         return trackResponse("ctx_execute", {
           content: [
             { type: "text" as const, text: output },
           ],
-          isError: true,
+          isError,
         });
       }
 
@@ -698,21 +701,23 @@ server.registerTool(
       }
 
       if (result.exitCode !== 0) {
-        const output = `Error processing ${path} (exit ${result.exitCode}):\n${result.stderr || result.stdout}`;
+        const { isError, output } = classifyNonZeroExit({
+          language, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr,
+        });
         if (intent && intent.trim().length > 0 && Buffer.byteLength(output) > INTENT_SEARCH_THRESHOLD) {
           trackIndexed(Buffer.byteLength(output));
           return trackResponse("ctx_execute_file", {
             content: [
-              { type: "text" as const, text: intentSearch(output, intent, `file:${path}:error`) },
+              { type: "text" as const, text: intentSearch(output, intent, isError ? `file:${path}:error` : `file:${path}`) },
             ],
-            isError: true,
+            isError,
           });
         }
         return trackResponse("ctx_execute_file", {
           content: [
             { type: "text" as const, text: output },
           ],
-          isError: true,
+          isError,
         });
       }
 
