@@ -25,7 +25,8 @@ import {
 } from "./runtime.js";
 import { classifyNonZeroExit } from "./exit-classify.js";
 import { startLifecycleGuard } from "./lifecycle.js";
-const VERSION = "1.0.21";
+import { getWorktreeSuffix } from "./session/db.js";
+const VERSION = "1.0.22";
 
 // Prevent silent server death from unhandled async errors
 process.on("unhandledRejection", (err) => {
@@ -847,6 +848,36 @@ const SEARCH_WINDOW_MS = 60_000;
 const SEARCH_MAX_RESULTS_AFTER = 3; // after 3 calls: 1 result per query
 const SEARCH_BLOCK_AFTER = 8; // after 8 calls: refuse, demand batching
 
+/**
+ * Defensive coercion: parse stringified JSON arrays.
+ * Works around Claude Code double-serialization bug where array params
+ * are sent as JSON strings (e.g. "[\"a\",\"b\"]" instead of ["a","b"]).
+ * See: https://github.com/anthropics/claude-code/issues/34520
+ */
+function coerceJsonArray(val: unknown): unknown {
+  if (typeof val === "string") {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed;
+    } catch { /* not valid JSON, let zod handle the error */ }
+  }
+  return val;
+}
+
+/**
+ * Coerce commands array: handles double-serialization AND the case where
+ * the model passes plain command strings instead of {label, command} objects.
+ */
+function coerceCommandsArray(val: unknown): unknown {
+  const arr = coerceJsonArray(val);
+  if (Array.isArray(arr)) {
+    return arr.map((item, i) =>
+      typeof item === "string" ? { label: `cmd_${i + 1}`, command: item } : item
+    );
+  }
+  return arr;
+}
+
 server.registerTool(
   "ctx_search",
   {
@@ -855,10 +886,10 @@ server.registerTool(
       "Search indexed content. Pass ALL search questions as queries array in ONE call.\n\n" +
       "TIPS: 2-4 specific terms per query. Use 'source' to scope results.",
     inputSchema: z.object({
-      queries: z
+      queries: z.preprocess(coerceJsonArray, z
         .array(z.string())
         .optional()
-        .describe("Array of search queries. Batch ALL questions in one call."),
+        .describe("Array of search queries. Batch ALL questions in one call.")),
       limit: z
         .number()
         .optional()
@@ -1201,7 +1232,7 @@ server.registerTool(
       "One batch_execute call replaces 30+ execute calls + 10+ search calls.\n" +
       "Provide all commands to run and all queries to search — everything happens in one round trip.",
     inputSchema: z.object({
-      commands: z
+      commands: z.preprocess(coerceCommandsArray, z
         .array(
           z.object({
             label: z
@@ -1217,15 +1248,15 @@ server.registerTool(
         .min(1)
         .describe(
           "Commands to execute as a batch. Each runs sequentially, output is labeled with the section header.",
-        ),
-      queries: z
+        )),
+      queries: z.preprocess(coerceJsonArray, z
         .array(z.string())
         .min(1)
         .describe(
           "Search queries to extract information from indexed output. Use 5-8 comprehensive queries. " +
           "Each returns top 5 matching sections with full content. " +
           "This is your ONLY chance — put ALL your questions here. No follow-up calls needed.",
-        ),
+        )),
       timeout: z
         .number()
         .optional()
@@ -1493,7 +1524,11 @@ server.registerTool(
     try {
       const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
       const dbHash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
-      const sessionDbPath = join(homedir(), ".claude", "context-mode", "sessions", `${dbHash}.db`);
+      const worktreeSuffix = getWorktreeSuffix();
+      const sessionDbPath = join(
+        homedir(), ".claude", "context-mode", "sessions",
+        `${dbHash}${worktreeSuffix}.db`
+      );
 
       if (existsSync(sessionDbPath)) {
         const require = createRequire(import.meta.url);
