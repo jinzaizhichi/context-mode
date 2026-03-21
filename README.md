@@ -42,7 +42,7 @@ That's it. The plugin installs everything automatically:
 - MCP server with 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`)
 - PreToolUse hooks that intercept Bash, Read, WebFetch, Grep, and Task calls — nudging them toward sandbox execution
 - PostToolUse, PreCompact, and SessionStart hooks for session tracking and context injection
-- A `CLAUDE.md` routing instructions file auto-created in your project root
+- Routing instructions injected automatically via SessionStart hook (no file written to your project)
 - Slash commands for diagnostics and upgrades (Claude Code only)
 
 | Command | What it does |
@@ -111,13 +111,7 @@ npm install -g context-mode
 }
 ```
 
-**Step 4 — Restart Gemini CLI.** On first session start, the sessionstart hook automatically manages `GEMINI.md` routing instructions in your project root:
-
-- **File does not exist** — the routing instructions file is written.
-- **File exists without context-mode rules** — routing instructions are appended after your existing content.
-- **File already contains context-mode rules** — skipped (idempotent, no duplicate content).
-
-This works alongside hooks as a parallel enforcement layer — hooks block dangerous commands programmatically, while `GEMINI.md` teaches the model to prefer sandbox tools from the start.
+**Step 4 — Restart Gemini CLI.** Routing instructions are injected automatically via the SessionStart hook — no file is written to your project. Hooks handle all enforcement programmatically.
 
 > **Why hooks matter:** Without hooks, context-mode relies on `GEMINI.md` instructions alone (~60% compliance). The model sometimes follows them, but regularly runs raw `curl`, reads large files directly, or dumps unprocessed output into context — a single unrouted Playwright snapshot (56 KB) wipes out an entire session's savings. With hooks, every tool call is intercepted before execution — dangerous commands are blocked, and routing guidance is injected in real-time. This is the difference between ~60% and ~98% context savings.
 
@@ -164,13 +158,7 @@ npm install -g context-mode
 }
 ```
 
-**Step 4 — Restart VS Code.** On first session start, the sessionstart hook automatically manages `.github/copilot-instructions.md` routing instructions in your project:
-
-- **File does not exist** — `.github/` is created and the routing instructions file is written.
-- **File exists without context-mode rules** — routing instructions are appended after your existing content, preserving project-level coding standards.
-- **File already contains context-mode rules** — skipped (idempotent, no duplicate content).
-
-This works alongside hooks as a parallel enforcement layer — hooks intercept tool calls programmatically, while `copilot-instructions.md` guides the model's tool selection from session start.
+**Step 4 — Restart VS Code.** Routing instructions are injected automatically via the SessionStart hook — no file is written to your project. Hooks handle all enforcement programmatically.
 
 > **Why hooks matter:** Without hooks, `copilot-instructions.md` guides the model but can't block commands. A single unrouted Playwright snapshot (56 KB) or `gh issue list` (59 KB) wipes out minutes of context savings. With hooks, these calls are intercepted and redirected to the sandbox before they execute.
 
@@ -222,9 +210,9 @@ npm install -g context-mode
 
 Note: the `preToolUse` hook matcher is optional. If you don't provide it, the hook will fire on all tools.
 
-**Step 4 — Restart Cursor or open a new agent session.** On first MCP server startup, routing instructions are auto-written to your project (same mechanism as Codex CLI).
+**Step 4 — Restart Cursor or open a new agent session.** Routing is enforced via the `preToolUse` hook. Since Cursor lacks SessionStart support, you may want to manually add routing instructions — copy `configs/cursor/.cursorrules` to your project root as `.cursorrules`, or place it in `.cursor/rules/`.
 
-> **Native Cursor scope:** `preToolUse` and `postToolUse` are supported. `sessionStart` is documented by Cursor but currently rejected by their validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)), so routing instructions are delivered via MCP server startup instead.
+> **Native Cursor scope:** `preToolUse` and `postToolUse` are supported. `sessionStart` is documented by Cursor but currently rejected by their validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)).
 >
 > **Config precedence:** project `.cursor/hooks.json` overrides `~/.cursor/hooks.json`.
 
@@ -259,13 +247,7 @@ npm install -g context-mode
 
 The `mcp` entry gives you the 6 sandbox tools. The `plugin` entry enables hooks — OpenCode calls the plugin's TypeScript functions directly before and after each tool execution, blocking dangerous commands (like raw `curl`) and enforcing sandbox routing.
 
-**Step 3 — Restart OpenCode.** On first plugin init, the plugin automatically manages `AGENTS.md` routing instructions in your project root:
-
-- **File does not exist** — the routing instructions file is written.
-- **File exists without context-mode rules** — routing instructions are appended after your existing content.
-- **File already contains context-mode rules** — skipped (idempotent, no duplicate content).
-
-This works alongside the plugin as a parallel enforcement layer — the plugin intercepts tool calls at runtime, while `AGENTS.md` guides the model's tool preferences from session start.
+**Step 3 — Restart OpenCode.** The plugin intercepts tool calls at runtime via `tool.execute.before` and `tool.execute.after`, enforcing sandbox routing programmatically. No routing file is written to your project.
 
 > **Why the plugin matters:** Without the `plugin` entry, context-mode has no way to intercept tool calls. The model can run raw `curl`, read large files directly, or dump unprocessed output into context — ignoring `AGENTS.md` instructions. With the plugin, `tool.execute.before` fires on every tool call and blocks or redirects data-heavy commands before they execute. The `experimental.session.compacting` hook builds and injects resume snapshots when the conversation compacts, preserving session state.
 >
@@ -300,7 +282,7 @@ Common locations:
 
 The installer handles everything: `npm install`, `npm run build`, `better-sqlite3` native rebuild, extension registration in `runtime.json`, and gateway restart via SIGUSR1.
 
-**Step 2 — Verify.** Open a Pi Agent session. The plugin auto-injects `AGENTS.md` routing instructions and registers 8 hooks via [`api.on()`](https://docs.openclaw.ai/tools/plugin) (lifecycle) and [`api.registerHook()`](https://docs.openclaw.ai/tools/plugin) (commands). All tool interception, session tracking, and compaction recovery hooks activate automatically — no manual hook configuration needed.
+**Step 2 — Verify.** Open a Pi Agent session. The plugin registers 8 hooks via [`api.on()`](https://docs.openclaw.ai/tools/plugin) (lifecycle) and [`api.registerHook()`](https://docs.openclaw.ai/tools/plugin) (commands). All tool interception, session tracking, and compaction recovery hooks activate automatically — no manual hook configuration or routing file needed.
 
 > **Why native plugin?** OpenClaw doesn't support shell-based hooks like Claude Code or Gemini CLI. Instead, plugins register TypeScript functions directly into the gateway runtime. This gives full access to tool interception, argument mutation, and session context injection — equivalent to the hook-based approach on other platforms.
 >
@@ -326,17 +308,21 @@ npm install -g context-mode
 command = "context-mode"
 ```
 
-**Step 3 — Restart Codex CLI.** On first run, an `AGENTS.md` routing instructions file is auto-created in your project root. Codex CLI reads `AGENTS.md` automatically and learns to prefer context-mode sandbox tools.
-
-**About hooks:** Codex CLI does not support hooks — PRs [#2904](https://github.com/openai/codex/pull/2904) and [#9796](https://github.com/openai/codex/pull/9796) were closed without merge. The `AGENTS.md` routing instructions file is the only enforcement method (~60% compliance). The model receives the instructions at session start and sometimes follows them, but there is no programmatic interception — it can run raw `curl`, read large files, or bypass sandbox tools at any time.
-
-For stronger enforcement, you can also add the instructions globally:
+**Step 3 — Copy routing instructions.** Codex CLI has no hook support, so you need to manually add the routing file:
 
 ```bash
-cp ~/.codex/AGENTS.md  # auto-created, or copy from node_modules/context-mode/configs/codex/AGENTS.md
+# Copy to project root
+cp node_modules/context-mode/configs/codex/AGENTS.md ./AGENTS.md
+
+# Or for global use
+cp node_modules/context-mode/configs/codex/AGENTS.md ~/.codex/AGENTS.md
 ```
 
 Global `~/.codex/AGENTS.md` applies to all projects. Project-level `./AGENTS.md` applies to the current project only. If both exist, Codex CLI merges them.
+
+**Step 4 — Restart Codex CLI.** Codex CLI reads `AGENTS.md` automatically and learns to prefer context-mode sandbox tools.
+
+**About hooks:** Codex CLI does not support hooks — PRs [#2904](https://github.com/openai/codex/pull/2904) and [#9796](https://github.com/openai/codex/pull/9796) were closed without merge. The `AGENTS.md` routing instructions file is the only enforcement method (~60% compliance). The model receives the instructions at session start and sometimes follows them, but there is no programmatic interception — it can run raw `curl`, read large files, or bypass sandbox tools at any time.
 
 </details>
 
@@ -361,7 +347,13 @@ npm install -g context-mode
 }
 ```
 
-**Step 3 — Restart Antigravity.** On first MCP server startup, a `GEMINI.md` routing instructions file is auto-created in your project root. Antigravity reads `GEMINI.md` automatically and learns to prefer context-mode sandbox tools.
+**Step 3 — Copy routing instructions.** Antigravity has no hook support, so you need to manually add the routing file:
+
+```bash
+cp node_modules/context-mode/configs/antigravity/GEMINI.md ./GEMINI.md
+```
+
+**Step 4 — Restart Antigravity.** Antigravity reads `GEMINI.md` automatically and learns to prefer context-mode sandbox tools.
 
 **About hooks:** Antigravity does not support hooks — there is no public hook API. The `GEMINI.md` routing instructions file is the only enforcement method (~60% compliance). The model receives the instructions at session start and sometimes follows them, but there is no programmatic interception — it can run raw `run_command`, read large files via `view_file`, or bypass sandbox tools at any time.
 
@@ -410,11 +402,13 @@ npm install -g context-mode
 }
 ```
 
-**Step 4 — Restart Kiro.** On first session start, the pretooluse hook automatically manages `KIRO.md` routing instructions in your project root:
+**Step 4 — Copy routing instructions.** Kiro's `preToolUse`/`postToolUse` hooks enforce sandbox routing, but since `agentSpawn` (SessionStart) is not yet implemented, you should manually add the routing file so the model gets instructions at session start:
 
-- **File does not exist** — the routing instructions file is written.
-- **File exists without context-mode rules** — routing instructions are appended after your existing content.
-- **File already contains context-mode rules** — skipped (idempotent, no duplicate content).
+```bash
+cp node_modules/context-mode/configs/kiro/KIRO.md ./KIRO.md
+```
+
+**Step 5 — Restart Kiro.**
 
 **Auto-detection:** context-mode detects Kiro automatically via the MCP protocol handshake (`clientInfo.name`). No environment variables or manual platform configuration needed.
 
@@ -443,7 +437,13 @@ npm install -g context-mode
 }
 ```
 
-**Step 3 — Restart Zed.** On first MCP server startup, an `AGENTS.md` routing instructions file is auto-created in your project root. Zed reads the MCP tools and the model learns to prefer context-mode sandbox tools.
+**Step 3 — Copy routing instructions.** Zed has no hook support, so you need to manually add the routing file:
+
+```bash
+cp node_modules/context-mode/configs/zed/AGENTS.md ./AGENTS.md
+```
+
+**Step 4 — Restart Zed.** Zed reads the MCP tools and the model learns to prefer context-mode sandbox tools.
 
 **About hooks:** Zed does not support hooks — there is no public hook or extension API for tool-use lifecycle events. The `AGENTS.md` routing instructions file is the only enforcement method (~60% compliance). The model receives the instructions at session start and sometimes follows them, but there is no programmatic interception.
 
@@ -667,19 +667,19 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 **Cursor** — Partial coverage. Native `preToolUse` and `postToolUse` hooks capture tool events. `sessionStart` is documented by Cursor but currently rejected by their validator, so session restore is not available. Routing instructions are delivered via MCP server startup instead.
 
-**OpenCode** — Partial. The TypeScript plugin captures PostToolUse events via `tool.execute.after`, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)). Events are stored but not automatically restored after compaction. The `AGENTS.md` routing instructions file compensates by re-teaching tool preferences at each session start.
+**OpenCode** — Partial. The TypeScript plugin captures PostToolUse events via `tool.execute.after`, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)). Events are stored but not automatically restored after compaction.
 
 **OpenClaw / Pi Agent** — High coverage. All tool lifecycle hooks (`after_tool_call`, `before_compaction`, `session_start`) fire via the native gateway plugin. User decisions aren't captured but file edits, git ops, errors, and tasks are fully tracked. Falls back to DB snapshot reconstruction if compaction hooks fail on older gateway versions. See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md).
 
-**Codex CLI** — No session support. No hooks means no event capture. Each compaction or new session starts fresh. The `AGENTS.md` routing instructions file is the only continuity mechanism.
+**Codex CLI** — No session support. No hooks means no event capture. Each compaction or new session starts fresh. Requires manually copying `AGENTS.md` to your project root.
 
-**Antigravity** — No session support. Same as Codex CLI — no hooks, no event capture. The `GEMINI.md` routing instructions file is auto-written on first MCP server startup. Auto-detected via MCP protocol handshake (`clientInfo.name`).
+**Antigravity** — No session support. Same as Codex CLI — no hooks, no event capture. Requires manually copying `GEMINI.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
-**Zed** — No session support. Same as Codex CLI — no hooks, no event capture. The `AGENTS.md` routing instructions file is auto-written on first MCP server startup. Auto-detected via MCP protocol handshake (`clientInfo.name`).
+**Zed** — No session support. Same as Codex CLI — no hooks, no event capture. Requires manually copying `AGENTS.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
-**Kiro** — Partial coverage. Native `preToolUse` and `postToolUse` hooks capture tool events and enforce sandbox routing. `agentSpawn` (the Kiro equivalent of SessionStart) is not yet implemented, so session restore after compaction is not available. The `KIRO.md` routing instructions file is auto-written on first session start. Auto-detected via MCP protocol handshake (`clientInfo.name`).
+**Kiro** — Partial coverage. Native `preToolUse` and `postToolUse` hooks capture tool events and enforce sandbox routing. `agentSpawn` (the Kiro equivalent of SessionStart) is not yet implemented, so session restore after compaction is not available. Requires manually copying `KIRO.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
-**Pi Coding Agent** — High coverage. The extension registers all key lifecycle events: `tool_call` (PreToolUse), `tool_result` (PostToolUse), `session_start` (SessionStart), and `session_before_compact` (PreCompact). File edits, git ops, errors, and tasks are fully tracked. Session restore after compaction works via the extension's event hooks. The `AGENTS.md` routing instructions file is auto-written on first session start.
+**Pi Coding Agent** — High coverage. The extension registers all key lifecycle events: `tool_call` (PreToolUse), `tool_result` (PostToolUse), `session_start` (SessionStart), and `session_before_compact` (PreCompact). File edits, git ops, errors, and tasks are fully tracked. Session restore after compaction works via the extension's event hooks.
 
 </details>
 
@@ -702,7 +702,7 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 >
 > **OpenClaw** runs context-mode as a native gateway plugin targeting Pi Agent sessions. Hooks register via `api.on()` (tool/lifecycle) and `api.registerHook()` (commands). All tool interception and compaction hooks are supported. See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md).
 >
-> **Codex CLI**, **Antigravity**, and **Zed** do not support hooks. They rely solely on routing instruction files (`AGENTS.md` / `GEMINI.md`) for enforcement (~60% compliance). Antigravity and Zed are auto-detected via MCP protocol handshake — no manual platform configuration needed.
+> **Codex CLI**, **Antigravity**, and **Zed** do not support hooks. They rely solely on manually-copied routing instruction files (`AGENTS.md` / `GEMINI.md`) for enforcement (~60% compliance). See each platform's install section for copy instructions. Antigravity and Zed are auto-detected via MCP protocol handshake — no manual platform configuration needed.
 >
 > **Kiro** supports native `preToolUse` and `postToolUse` hooks for routing enforcement and tool event capture. `agentSpawn` (SessionStart equivalent) and `stop` are not yet wired. Kiro is auto-detected via MCP protocol handshake (`clientInfo.name`).
 >
@@ -713,6 +713,8 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 ### Routing Enforcement
 
 Hooks intercept tool calls programmatically — they can block dangerous commands and redirect them to the sandbox before execution. Instruction files guide the model via prompt instructions but cannot block anything. **Always enable hooks where supported.**
+
+> **Note:** Routing instruction files were previously auto-written to project directories on first session start. This was disabled to prevent git tree pollution ([#158](https://github.com/mksglu/context-mode/issues/158), [#164](https://github.com/mksglu/context-mode/issues/164)). Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, OpenClaw) inject routing via hooks and need no file. Non-hook platforms (Codex, Zed, Cursor, Kiro, Antigravity) require a one-time manual copy — see each platform's install section.
 
 | Platform | Hooks | Instruction File | With Hooks | Without Hooks |
 |---|:---:|---|:---:|:---:|
