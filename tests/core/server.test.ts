@@ -1398,3 +1398,47 @@ describe("ContentStore purge behavior", () => {
     expect(purgeBody).toContain("unlinkSync");
   });
 });
+
+// ─── Version outdated warning ────────────────────────────────────────────────
+
+describe("Version outdated warning in trackResponse", () => {
+  const serverSrc = readFileSync(
+    resolve(__dirname, "../../src/server.ts"),
+    "utf-8",
+  );
+
+  test("fetchLatestVersion function exists and uses npm registry", () => {
+    expect(serverSrc).toContain("function fetchLatestVersion");
+    expect(serverSrc).toContain("registry.npmjs.org/context-mode");
+  });
+
+  test("version check fires in main() after server.connect", () => {
+    const mainFn = serverSrc.slice(serverSrc.indexOf("async function main"));
+    expect(mainFn).toContain("fetchLatestVersion");
+  });
+
+  test("trackResponse prepends warning when outdated", () => {
+    const trackFn = serverSrc.slice(
+      serverSrc.indexOf("function trackResponse"),
+      serverSrc.indexOf("function trackIndexed"),
+    );
+    expect(trackFn).toContain("_latestVersion");
+    expect(trackFn).toContain("outdated");
+  });
+
+  test("warning uses burst cadence (3 calls then silent)", () => {
+    expect(serverSrc).toContain("VERSION_BURST_SIZE");
+    expect(serverSrc).toContain("VERSION_SILENT_MS");
+    expect(serverSrc).toContain("_warningBurstCount");
+  });
+
+  test("getUpgradeHint returns platform-specific command", () => {
+    expect(serverSrc).toContain("function getUpgradeHint");
+    // Claude Code gets slash command
+    expect(serverSrc).toMatch(/claude.code.*ctx.upgrade|ctx.upgrade.*claude.code/i);
+    // npm platforms get npm update
+    expect(serverSrc).toContain("npm update -g context-mode");
+    // OpenClaw gets its own command
+    expect(serverSrc).toContain("npm run install:openclaw");
+  });
+});

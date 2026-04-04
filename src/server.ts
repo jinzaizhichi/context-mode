@@ -7,6 +7,7 @@ import { existsSync, unlinkSync, readdirSync, readFileSync, rmSync, mkdirSync } 
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
+import { request as httpsRequest } from "node:https";
 import { z } from "zod";
 import { PolyglotExecutor } from "./executor.js";
 import { ContentStore, cleanupStaleDBs, cleanupStaleContentDBs, type SearchResult, type IndexResult } from "./store.js";
@@ -206,7 +207,73 @@ type ToolResult = {
   isError?: boolean;
 };
 
+// ── Version outdated warning ──────────────────────────────────────────────
+// Non-blocking npm check at startup. trackResponse prepends warning
+// using a burst cadence: 3 warnings → 1h silent → 3 warnings → repeat.
+
+let _latestVersion: string | null = null;
+let _warningBurstCount = 0;
+let _lastBurstStart = 0;
+const VERSION_BURST_SIZE = 3;
+const VERSION_SILENT_MS = 60 * 60 * 1000; // 1 hour
+
+async function fetchLatestVersion(): Promise<string> {
+  return new Promise((res) => {
+    const req = httpsRequest(
+      "https://registry.npmjs.org/context-mode/latest",
+      { headers: { Connection: "close" } },
+      (resp) => {
+        let raw = "";
+        resp.on("data", (chunk: Buffer) => { raw += chunk; });
+        resp.on("end", () => {
+          try {
+            const data = JSON.parse(raw) as { version?: string };
+            res(data.version ?? "unknown");
+          } catch { res("unknown"); }
+        });
+      },
+    );
+    req.on("error", () => res("unknown"));
+    req.setTimeout(5000, () => { req.destroy(); res("unknown"); });
+    req.end();
+  });
+}
+
+function getUpgradeHint(): string {
+  const name = _detectedAdapter?.name;
+  if (name === "Claude Code") return "/ctx-upgrade";
+  if (name === "OpenClaw") return "npm run install:openclaw";
+  if (name === "Pi") return "npm run build";
+  return "npm update -g context-mode";
+}
+
+function isOutdated(): boolean {
+  if (!_latestVersion || _latestVersion === "unknown") return false;
+  return _latestVersion !== VERSION;
+}
+
+function shouldShowVersionWarning(): boolean {
+  if (!isOutdated()) return false;
+  const now = Date.now();
+  // Start of a new burst?
+  if (_warningBurstCount >= VERSION_BURST_SIZE) {
+    if (now - _lastBurstStart < VERSION_SILENT_MS) return false; // still silent
+    _warningBurstCount = 0; // silence over, reset burst
+  }
+  if (_warningBurstCount === 0) _lastBurstStart = now;
+  _warningBurstCount++;
+  return true;
+}
+
 function trackResponse(toolName: string, response: ToolResult): ToolResult {
+  // Prepend version outdated warning if needed
+  if (shouldShowVersionWarning() && response.content.length > 0) {
+    const hint = getUpgradeHint();
+    response.content[0].text =
+      `⚠️ context-mode v${VERSION} outdated → v${_latestVersion} available. Upgrade: ${hint}\n\n` +
+      response.content[0].text;
+  }
+
   const bytes = response.content.reduce(
     (sum, c) => sum + Buffer.byteLength(c.text),
     0,
@@ -1999,6 +2066,9 @@ async function main() {
       console.error(`MCP client: ${clientInfo.name} v${clientInfo.version} → ${signal.platform}`);
     }
   } catch { /* best effort — _detectedAdapter stays null, falls back to .claude */ }
+
+  // Non-blocking version check — result stored for trackResponse warnings
+  fetchLatestVersion().then(v => { if (v !== "unknown") _latestVersion = v; });
 
   console.error(`Context Mode MCP server v${VERSION} running on stdio`);
   console.error(`Detected runtimes:\n${getRuntimeSummary(runtimes)}`);
