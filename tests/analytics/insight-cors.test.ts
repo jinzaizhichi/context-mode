@@ -177,15 +177,29 @@ describe("Insight API same-machine cross-origin policy", () => {
   let serverTempDir: string | undefined;
 
   beforeAll(async () => {
-    const started = startInsight("node");
-    port = started.port;
-    serverChild = started.child;
-    // Remove from global cleanup arrays — this describe manages its own lifecycle.
-    // afterEach would otherwise kill the server or delete its temp dir between tests.
-    const childIdx = children.indexOf(serverChild);
-    if (childIdx !== -1) children.splice(childIdx, 1);
-    serverTempDir = tempDirs.pop(); // startInsight pushes tempRoot last
-    await waitForInsight(port, serverChild);
+    // better-sqlite3 can SIGSEGV on CI under fork workers — retry spawn up to 3 times
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const started = startInsight("node");
+      const child = started.child;
+      // Remove from global cleanup arrays — this describe manages its own lifecycle.
+      // afterEach would otherwise kill the server or delete its temp dir between tests.
+      const childIdx = children.indexOf(child);
+      if (childIdx !== -1) children.splice(childIdx, 1);
+      const td = tempDirs.pop(); // startInsight pushes tempRoot last
+      try {
+        await waitForInsight(started.port, child);
+        port = started.port;
+        serverChild = child;
+        serverTempDir = td;
+        return;
+      } catch (err) {
+        lastErr = err;
+        try { child.kill("SIGKILL"); } catch { /* best effort */ }
+        if (td) { try { rmSync(td, { recursive: true, force: true }); } catch { /* best effort */ } }
+      }
+    }
+    throw lastErr;
   });
 
   afterAll(() => {
