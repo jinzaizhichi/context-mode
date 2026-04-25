@@ -10,7 +10,7 @@ import "./ensure-deps.mjs";
  * Must be fast (<20ms). No network, no LLM, just SQLite writes.
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getInputProjectDir } from "./session-helpers.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, getInputProjectDir } from "./session-helpers.mjs";
 import { createSessionLoaders, attributeAndInsertEvents } from "./session-loaders.mjs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ const { loadSessionDB, loadExtract, loadProjectAttribution } = createSessionLoad
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const projectDir = getInputProjectDir(input);
 
   const { extractEvents } = await loadExtract();

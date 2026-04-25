@@ -5,7 +5,7 @@ import "../ensure-deps.mjs";
  * Cursor postToolUse hook — session event capture.
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getInputProjectDir, CURSOR_OPTS } from "../session-helpers.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, getInputProjectDir, CURSOR_OPTS } from "../session-helpers.mjs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSessionLoaders, attributeAndInsertEvents } from "../session-loaders.mjs";
@@ -30,7 +30,7 @@ function normalizeToolName(toolName) {
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const projectDir = getInputProjectDir(input, CURSOR_OPTS);
 
   if (projectDir && !process.env.CURSOR_CWD) {

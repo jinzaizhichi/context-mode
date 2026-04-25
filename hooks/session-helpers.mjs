@@ -106,6 +106,16 @@ export function resolveConfigDir(opts = CLAUDE_OPTS) {
 }
 
 /**
+ * Safely parse raw stdin string as JSON.
+ * Returns empty object for empty/whitespace/BOM-only input instead of throwing.
+ * Strips BOM prefix before parsing. Throws on genuinely malformed JSON.
+ */
+export function parseStdin(raw) {
+  const cleaned = raw.replace(/^\uFEFF/, "").trim();
+  return cleaned ? JSON.parse(cleaned) : {};
+}
+
+/**
  * Read all of stdin as a string (event-based, cross-platform safe).
  */
 export function readStdin() {

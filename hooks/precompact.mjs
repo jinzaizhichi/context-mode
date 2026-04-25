@@ -9,7 +9,7 @@ import "./ensure-deps.mjs";
  * snapshot (<2KB XML), and stores it for injection after compact.
  */
 
-import { readStdin, getSessionId, getSessionDBPath, resolveConfigDir } from "./session-helpers.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, resolveConfigDir } from "./session-helpers.mjs";
 import { createSessionLoaders } from "./session-loaders.mjs";
 import { appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -22,7 +22,7 @@ const DEBUG_LOG = join(resolveConfigDir(), "context-mode", "precompact-debug.log
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
 
   const { buildResumeSnapshot } = await loadSnapshot();
   const { SessionDB } = await loadSessionDB();

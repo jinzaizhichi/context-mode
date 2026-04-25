@@ -18,7 +18,7 @@ import { homedir, tmpdir } from "node:os";
 import { readStdin } from "./core/stdin.mjs";
 import { routePreToolUse, initSecurity } from "./core/routing.mjs";
 import { formatDecision } from "./core/formatters.mjs";
-import { getSessionId, resolveConfigDir } from "./session-helpers.mjs";
+import { parseStdin, getSessionId, resolveConfigDir } from "./session-helpers.mjs";
 
 // ─── Manual recursive copy (avoids cpSync libuv crash on non-ASCII paths, Windows + Node 24) ───
 function copyDirSync(src, dest) {
@@ -159,7 +159,7 @@ await initSecurity(resolve(__hookDir, "..", "build"));
 
 // ─── Read stdin ───
 const raw = await readStdin();
-const input = JSON.parse(raw);
+const input = parseStdin(raw);
 const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 

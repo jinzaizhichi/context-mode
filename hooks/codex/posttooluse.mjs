@@ -5,7 +5,7 @@ import "../ensure-deps.mjs";
  * Codex CLI postToolUse hook — session event capture.
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getInputProjectDir, CODEX_OPTS } from "../session-helpers.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, getInputProjectDir, CODEX_OPTS } from "../session-helpers.mjs";
 import { createSessionLoaders, attributeAndInsertEvents } from "../session-loaders.mjs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ function normalizeToolName(toolName) {
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const projectDir = getInputProjectDir(input, OPTS);
 
   const { extractEvents } = await loadExtract();

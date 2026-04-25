@@ -8,7 +8,7 @@ import "../ensure-deps.mjs";
  * Source: https://kiro.dev/docs/cli/hooks/
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getInputProjectDir, KIRO_OPTS } from "../session-helpers.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, getInputProjectDir, KIRO_OPTS } from "../session-helpers.mjs";
 import { createSessionLoaders, attributeAndInsertEvents } from "../session-loaders.mjs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,7 @@ const OPTS = KIRO_OPTS;
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
 
   const { extractEvents } = await loadExtract();
   const { resolveProjectAttributions } = await loadProjectAttribution();

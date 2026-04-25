@@ -10,7 +10,7 @@ import "../suppress-stderr.mjs";
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readStdin, getInputProjectDir, getSessionId, CODEX_OPTS } from "../session-helpers.mjs";
+import { readStdin, parseStdin, getInputProjectDir, getSessionId, CODEX_OPTS } from "../session-helpers.mjs";
 import { routePreToolUse, initSecurity } from "../core/routing.mjs";
 import { formatDecision } from "../core/formatters.mjs";
 
@@ -18,7 +18,7 @@ const __hookDir = dirname(fileURLToPath(import.meta.url));
 await initSecurity(resolve(__hookDir, "..", "..", "build"));
 
 const raw = await readStdin();
-const input = JSON.parse(raw);
+const input = parseStdin(raw);
 const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 const projectDir = getInputProjectDir(input, CODEX_OPTS);

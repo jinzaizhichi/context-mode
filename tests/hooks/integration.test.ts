@@ -681,3 +681,102 @@ describe("resolveConfigDir (#289)", () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// parseStdin — safe JSON parse for empty/malformed stdin (#322)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("parseStdin (#322)", () => {
+  const HELPERS_PATH = join(__dirname, "..", "..", "hooks", "session-helpers.mjs");
+
+  function runParseTest(raw: string): { parsed: boolean; result: unknown; error?: string } {
+    const code = `
+      const { parseStdin } = await import(${JSON.stringify(HELPERS_PATH)});
+      try {
+        const result = parseStdin(${JSON.stringify(raw)});
+        process.stdout.write(JSON.stringify({ parsed: true, result }));
+      } catch(e) {
+        process.stdout.write(JSON.stringify({ parsed: false, error: e.message }));
+      }
+    `;
+    const r = spawnSync("node", ["--input-type=module", "-e", code], {
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+    return JSON.parse(r.stdout);
+  }
+
+  test("empty string returns empty object", () => {
+    expect(runParseTest("").result).toEqual({});
+  });
+
+  test("whitespace-only returns empty object", () => {
+    expect(runParseTest("   \n  ").result).toEqual({});
+  });
+
+  test("BOM-only returns empty object", () => {
+    expect(runParseTest("\uFEFF").result).toEqual({});
+  });
+
+  test("valid JSON parsed correctly", () => {
+    expect(runParseTest('{"source":"startup"}').result).toEqual({ source: "startup" });
+  });
+
+  test("BOM-prefixed JSON parsed correctly", () => {
+    expect(runParseTest('\uFEFF{"source":"compact"}').result).toEqual({ source: "compact" });
+  });
+
+  test("malformed JSON throws", () => {
+    const out = runParseTest("{broken");
+    expect(out.parsed).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Empty stdin resilience — all hooks survive empty input (#322)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("empty stdin resilience (#322)", () => {
+  const PROJECT_ROOT = join(__dirname, "..", "..");
+
+  function runHookWithEmptyStdin(hookPath: string): { exitCode: number } {
+    const fakeHome = mkdtempSync(join(tmpdir(), "ctx-empty-stdin-"));
+    const fakeProject = mkdtempSync(join(tmpdir(), "ctx-empty-project-"));
+    try {
+      const r = spawnSync("node", [join(PROJECT_ROOT, "hooks", hookPath)], {
+        input: "",
+        encoding: "utf-8",
+        timeout: 15000,
+        env: {
+          ...process.env,
+          HOME: fakeHome,
+          CLAUDE_PROJECT_DIR: fakeProject,
+          GEMINI_PROJECT_DIR: fakeProject,
+          VSCODE_CWD: fakeProject,
+          CURSOR_CWD: fakeProject,
+          CONTEXT_MODE_SESSION_SUFFIX: "",
+        },
+      });
+      return { exitCode: r.status ?? -1 };
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+      rmSync(fakeProject, { recursive: true, force: true });
+    }
+  }
+
+  // All 6 adapters × their hook files
+  const hooks = [
+    "sessionstart.mjs", "precompact.mjs", "posttooluse.mjs", "userpromptsubmit.mjs",
+    "gemini-cli/sessionstart.mjs", "gemini-cli/beforetool.mjs", "gemini-cli/aftertool.mjs", "gemini-cli/precompress.mjs",
+    "vscode-copilot/sessionstart.mjs", "vscode-copilot/pretooluse.mjs", "vscode-copilot/posttooluse.mjs", "vscode-copilot/precompact.mjs",
+    "cursor/sessionstart.mjs", "cursor/pretooluse.mjs", "cursor/posttooluse.mjs", "cursor/stop.mjs",
+    "codex/sessionstart.mjs", "codex/pretooluse.mjs", "codex/posttooluse.mjs",
+    "kiro/pretooluse.mjs", "kiro/posttooluse.mjs",
+  ];
+
+  for (const hook of hooks) {
+    test(`${hook} exits 0 on empty stdin`, () => {
+      expect(runHookWithEmptyStdin(hook).exitCode).toBe(0);
+    });
+  }
+});
