@@ -117,32 +117,21 @@ function seedFixtureDBs(baseDir: string): { sessionsDir: string; contentDir: str
 }
 
 async function waitForInsight(port: number, child: ChildProcess): Promise<void> {
-  // Wait for the server's stdout ready banner instead of blind HTTP polling.
-  // The server prints "http://localhost:{PORT}" when it's listening (server.mjs:853).
+  // Capture stderr for diagnostics if the server fails to start
   let stderr = "";
   child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
 
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error(`Insight server did not become ready within 15s. stderr: ${stderr || "(empty)"}`));
-    }, 15_000);
+  // Detect early exit so we can fail fast with a useful message
+  let exited = false;
+  let exitCode: number | null = null;
+  child.on("exit", (code) => { exited = true; exitCode = code; });
 
-    child.stdout?.on("data", (chunk: Buffer) => {
-      if (chunk.toString().includes(`localhost:${port}`)) {
-        clearTimeout(timeout);
-        resolve();
-      }
-    });
-
-    child.on("exit", (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`Insight server exited early with code ${code}. stderr: ${stderr || "(empty)"}`));
-    });
-  });
-
-  // Follow-up HTTP check to confirm the server is actually responding
+  // Poll HTTP endpoint with generous CI timeout (120 × 250ms = 30s)
   let lastError: string | undefined;
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 120; i++) {
+    if (exited) {
+      throw new Error(`Insight server exited with code ${exitCode} before becoming ready. stderr: ${stderr || "(empty)"}`);
+    }
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/overview`);
       if (res.ok) return;
@@ -150,9 +139,9 @@ async function waitForInsight(port: number, child: ChildProcess): Promise<void> 
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
     }
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 250));
   }
-  throw new Error(`Insight server banner seen but HTTP not ready: ${lastError ?? "unknown"}`);
+  throw new Error(`Insight server did not become ready within 30s: ${lastError ?? "unknown"}. stderr: ${stderr || "(empty)"}`);
 }
 
 function startInsight(runtime: "node" | "bun" = "node"): { port: number; child: ChildProcess } {
