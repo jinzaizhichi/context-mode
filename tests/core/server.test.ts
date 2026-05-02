@@ -1965,3 +1965,77 @@ describe("getSessionDir uses pre-detection when adapter not yet detected", () =>
     expect(detectIdx).toBeLessThan(claudeIdx);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ctx_fetch_and_index cache-key collision (Fix 6/10)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Bug: cache key was `source ?? url`, so two distinct URLs sharing a `source`
+// label silently returned the cached first response instead of fetching the
+// second. Fix composes the cache key from label+url for cache lookup.
+
+describe("ctx_fetch_and_index cache key includes URL (Fix 6/10)", () => {
+  test("composeFetchCacheKey: same label + different URLs produce different keys", async () => {
+    const { composeFetchCacheKey } = await import("../../src/fetch-cache.js");
+    const k1 = composeFetchCacheKey("Docs", "https://x.com/a");
+    const k2 = composeFetchCacheKey("Docs", "https://y.com/b");
+    expect(k1).not.toBe(k2);
+  });
+
+  test("composeFetchCacheKey: same label + same URL → same key (legitimate cache hit)", async () => {
+    const { composeFetchCacheKey } = await import("../../src/fetch-cache.js");
+    const k1 = composeFetchCacheKey("Docs", "https://x.com/a");
+    const k2 = composeFetchCacheKey("Docs", "https://x.com/a");
+    expect(k1).toBe(k2);
+  });
+
+  test("server.ts uses composeFetchCacheKey for cache lookup (no bare-label collision)", () => {
+    const serverSrc = readFileSync(
+      resolve(__dirname, "../../src/server.ts"),
+      "utf-8",
+    );
+    // Locate the ctx_fetch_and_index handler block
+    const block = serverSrc.match(
+      /registerTool\(\s*"ctx_fetch_and_index"[\s\S]*?^\);/m,
+    );
+    expect(block, "ctx_fetch_and_index handler not found").not.toBeNull();
+    const body = block![0];
+
+    // Cache lookup must call getSourceMeta with a key composed from label+url,
+    // not the bare label/url. The fix uses composeFetchCacheKey().
+    const lookupCall = body.match(
+      /getSourceMeta\(\s*([^)]+)\s*\)/,
+    );
+    expect(lookupCall, "getSourceMeta call missing").not.toBeNull();
+    const arg = lookupCall![1];
+    // Must NOT be the bare `label` variable (that was the bug).
+    expect(arg.trim()).not.toBe("label");
+    // Must reference both the label and the url, ideally via composeFetchCacheKey.
+    expect(body).toContain("composeFetchCacheKey");
+  });
+
+  test("ContentStore: per-(label,url) keys do not collide on getSourceMeta", () => {
+    const store = new ContentStore(":memory:");
+    // Simulate two distinct URLs sharing a user-supplied "source" label,
+    // but stored under composed keys per the fix.
+    const URL_A = "https://example.com/a";
+    const URL_B = "https://example.com/b";
+    const labelA = `Docs::${URL_A}`;
+    const labelB = `Docs::${URL_B}`;
+
+    store.index({ content: "# A\nContent A unique alpha", source: labelA });
+    // Before fix: a second cache lookup with the bare "Docs" label would
+    // hit A's meta and short-circuit. After fix: lookup uses labelB → miss.
+    expect(store.getSourceMeta(labelB)).toBeNull();
+    // Cache hit for the same (label,url) still works.
+    expect(store.getSourceMeta(labelA)).not.toBeNull();
+
+    // Now index B and verify both remain searchable independently.
+    store.index({ content: "# B\nContent B unique bravo", source: labelB });
+    const aResults = store.search("alpha", 5, labelA);
+    const bResults = store.search("bravo", 5, labelB);
+    expect(aResults.length).toBeGreaterThan(0);
+    expect(bResults.length).toBeGreaterThan(0);
+    store.close();
+  });
+});

@@ -12,6 +12,7 @@ import { request as httpsRequest } from "node:https";
 import { z } from "zod";
 import { PolyglotExecutor } from "./executor.js";
 import { ContentStore, cleanupStaleDBs, cleanupStaleContentDBs, type SearchResult, type IndexResult } from "./store.js";
+import { composeFetchCacheKey } from "./fetch-cache.js";
 import {
   readBashPolicies,
   evaluateCommandDenyOnly,
@@ -1601,11 +1602,13 @@ server.registerTool(
     }),
   },
   async ({ url, source, force }) => {
-    // TTL cache: if source was indexed within 24h, return cached hint
+    // TTL cache: if source was indexed within 24h, return cached hint.
+    // Cache key composes (source, url) so two distinct URLs sharing the same
+    // `source` label do not collide — they each get their own cache slot.
     if (!force) {
       const store = getStore();
-      const label = source ?? url;
-      const meta = store.getSourceMeta(label);
+      const cacheKey = composeFetchCacheKey(source, url);
+      const meta = store.getSourceMeta(cacheKey);
       if (meta) {
         const indexedAt = new Date(meta.indexedAt + "Z"); // SQLite datetime is UTC without Z
         const ageMs = Date.now() - indexedAt.getTime();
@@ -1687,15 +1690,19 @@ server.registerTool(
 
       trackIndexed(Buffer.byteLength(markdown));
 
-      // Route to the appropriate indexing strategy based on Content-Type
+      // Route to the appropriate indexing strategy based on Content-Type.
+      // Storage label includes URL via composeFetchCacheKey so two URLs sharing
+      // a `source` label do not overwrite each other; ctx_search() still finds
+      // both via LIKE-mode source filter on the `source` substring.
+      const storageLabel = composeFetchCacheKey(source, url);
       let indexed: IndexResult;
       if (header === "__CM_CT__:json") {
-        indexed = store.indexJSON(markdown, source ?? url);
+        indexed = store.indexJSON(markdown, storageLabel);
       } else if (header === "__CM_CT__:text") {
-        indexed = store.indexPlainText(markdown, source ?? url);
+        indexed = store.indexPlainText(markdown, storageLabel);
       } else {
         // HTML (default) — content is already converted to markdown
-        indexed = store.index({ content: markdown, source: source ?? url });
+        indexed = store.index({ content: markdown, source: storageLabel });
       }
 
       // Build preview — first ~3KB of markdown for immediate use
