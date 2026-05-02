@@ -186,7 +186,8 @@ describe("selfHealCacheHealHook", () => {
     const after = JSON.parse(readFileSync(settingsPath, "utf-8"));
     const cmd = after.hooks.SessionStart[0].hooks[0].command;
     // Unix-form: just the script path, quoted, no node prefix.
-    expect(cmd).toBe(`"${scriptPath}"`);
+    // buildHookCommand normalizes backslashes → forward slashes for cross-platform safety.
+    expect(cmd).toBe(`"${scriptPath.replace(/\\/g, "/")}"`);
     expect(cmd).not.toContain("/totally-gone/");
 
     // Script should now have shebang + exec bit.
