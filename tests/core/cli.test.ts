@@ -1490,3 +1490,47 @@ describe("better-sqlite3 binding self-heal (#408)", () => {
     });
   });
 });
+
+// ── Upgrade flow: skip npm rebuild when binding present (v1.0.110 fix) ──
+//
+// `/ctx-upgrade` previously ran `npm rebuild better-sqlite3` unconditionally
+// after `npm install --production`. That rebuild's internal prebuild-install
+// spawn raced with the npm install tree-prune and intermittently failed
+// resolving `rc/index` — printing a scary "Native addon rebuild warning"
+// even though the binding from npm install was already healthy. Fix: pre-
+// check `existsSync(better_sqlite3.node)` and skip the rebuild when present;
+// otherwise delegate to the same `healBetterSqlite3Binding` helper used by
+// postinstall + ensure-deps so all three sites share one battle-tested path.
+//
+// Repro context: macOS upgrade 2026-05-04 (Mert), zero binding-functional
+// regression but cosmetic stderr noise + yellow warning that erodes trust.
+
+describe("Upgrade rebuild guard (v1.0.110 — skip npm rebuild when binding present)", () => {
+  const CLI_SOURCE = readFileSync(resolve(ROOT, "src/cli.ts"), "utf-8");
+  const upgradeStart = CLI_SOURCE.indexOf("async function upgrade");
+  const upgradeBody = CLI_SOURCE.slice(upgradeStart);
+
+  it("guards npm rebuild with existsSync check on better_sqlite3.node", () => {
+    // A guard must sit on the same code path that calls `npm rebuild
+    // better-sqlite3` so the rebuild is skipped when the binding already
+    // works. Look for an existsSync call referencing the binding within
+    // the rebuild block.
+    const rebuildStartIdx = upgradeBody.indexOf("Rebuilding native addons");
+    expect(rebuildStartIdx).toBeGreaterThan(-1);
+    const region = upgradeBody.slice(
+      Math.max(0, rebuildStartIdx - 600),
+      rebuildStartIdx + 800,
+    );
+    expect(region).toMatch(/better_sqlite3\.node/);
+    expect(region).toMatch(/existsSync\(/);
+  });
+
+  it("delegates to healBetterSqlite3Binding when binding is missing", () => {
+    // Single source of truth — when a heal IS needed, use the shared
+    // helper (PR #410) instead of raw `npm rebuild`. Eliminates the
+    // npm-internal prebuild-install / rc resolution race.
+    const rebuildStartIdx = upgradeBody.indexOf("Rebuilding native addons");
+    const region = upgradeBody.slice(rebuildStartIdx, rebuildStartIdx + 1500);
+    expect(region).toContain("healBetterSqlite3Binding");
+  });
+});

@@ -804,22 +804,50 @@ async function upgrade() {
     if (detection.platform !== 'opencode' && detection.platform !== 'kilo') {
       // Rebuild native addons for current Node.js ABI (fixes #131)
       s.start("Rebuilding native addons");
-      try {
-        npmExecFile(["rebuild", "better-sqlite3"], {
-          cwd: pluginRoot,
-          stdio: "pipe",
-          timeout: 60000,
-        });
-        s.stop(color.green("Native addons rebuilt"));
-        changes.push("Rebuilt better-sqlite3 for current Node.js");
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        s.stop(color.yellow("Native addon rebuild warning"));
-        p.log.warn(
-          color.yellow("better-sqlite3 rebuild issue") +
-            ` — ${message}` +
-            color.dim(`\n  Try manually: cd "${pluginRoot}" && npm rebuild better-sqlite3`),
-        );
+      const bsqBindingPath = resolve(
+        pluginRoot, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node",
+      );
+      // Skip rebuild when the binding from `npm install --production` is
+      // already present. Earlier code ran `npm rebuild better-sqlite3`
+      // unconditionally — its internal prebuild-install spawn raced with
+      // the prior install's tree-prune, intermittently failing to resolve
+      // `rc/index.js` and printing a scary "rebuild warning" even though
+      // the binding was healthy. Pre-check eliminates the race for the
+      // 99% case (binding survived install).
+      if (existsSync(bsqBindingPath)) {
+        s.stop(color.green("Native addons OK") + color.dim(" — binding present"));
+        changes.push("better-sqlite3 binding already present (no rebuild needed)");
+      } else {
+        // Binding actually missing — delegate to the shared 3-layer heal
+        // (scripts/heal-better-sqlite3.mjs, PR #410) instead of raw
+        // `npm rebuild`. Single source of truth across postinstall +
+        // ensure-deps + cli upgrade. Layer A spawns prebuild-install
+        // directly via process.execPath, bypassing PATH/MSVC and the
+        // npm-internal rc-resolution race that bit `npm rebuild`.
+        try {
+          const healUrl = pathToFileURL(
+            resolve(pluginRoot, "scripts", "heal-better-sqlite3.mjs"),
+          ).href;
+          const { healBetterSqlite3Binding } = await import(healUrl);
+          const result = healBetterSqlite3Binding(pluginRoot);
+          if (result?.healed) {
+            s.stop(color.green("Native addons healed") + color.dim(` (${result.reason})`));
+            changes.push(`Healed better-sqlite3 binding via ${result.reason}`);
+          } else {
+            s.stop(color.yellow("Native addon heal needs manual step"));
+            p.log.warn(
+              color.dim(`  Run: cd "${pluginRoot}" && npm install better-sqlite3`),
+            );
+          }
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          s.stop(color.yellow("Native addon heal unavailable"));
+          p.log.warn(
+            color.yellow("better-sqlite3 heal helper missing") +
+              ` — ${message}` +
+              color.dim(`\n  Try manually: cd "${pluginRoot}" && npm rebuild better-sqlite3`),
+          );
+        }
       }
     }
     
