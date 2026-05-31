@@ -352,7 +352,6 @@ describe("platform-bridge — project identity resolution", () => {
       execSync(`git init -q && git remote add origin git@github.com:acme/myrepo.git`, {
         cwd: repo,
         stdio: "ignore",
-        shell: "/bin/bash",
       });
 
       // Same .git → linked worktrees share remote config. Simulate by
@@ -383,7 +382,6 @@ describe("platform-bridge — project identity resolution", () => {
       execSync(`git init -q && git remote add origin https://github.com/acme/mono.git`, {
         cwd: root,
         stdio: "ignore",
-        shell: "/bin/bash",
       });
       // Root workspace package.json (umbrella name)
       writeFileSync(join(root, "package.json"), JSON.stringify({ name: "mono-root" }));
@@ -470,7 +468,6 @@ describe("platform-bridge — project identity resolution", () => {
       execSync(`git init -q && git remote add origin git@github.com:mksglu/context-mode.git`, {
         cwd: repo,
         stdio: "ignore",
-        shell: "/bin/bash",
       });
 
       mkdirSync(join(fakeHome, ".context-mode"), { recursive: true });
