@@ -200,38 +200,37 @@ await runHook(async () => {
         // D2 PRD Phase 6.2: emit snapshot-consumed with bytes_returned=snapshot.length.
         // The resumed snapshot bytes ARE returned to the model — that's the whole
         // point of resume — so account them on bytes_returned, not bytes_avoided.
+        // v1.0.160: route through wire — resume metric on the platform reads
+        // category='session-resume' rows. Both snapshot-consumed (bytes
+        // returned) and resume_completed land here so the dashboard sees
+        // every resume boundary.
         try {
           const resumeRow = (resume && resume.snapshot)
             ? resume
             : (db.getResume?.(sessionId) ?? null);
           const snapshotBytes = resumeRow?.snapshot?.length ?? 0;
+          const { resolveProjectAttributions } = await loadProjectAttribution();
+          const projectDirResumeMeta = getInputProjectDir(input);
 
-          db.insertEvent(
+          await attributeAndInsertEvents(
+            db,
             sessionId,
-            {
+            [{
               type: "snapshot-consumed",
               category: "session-resume",
               data: `Session resumed from ${source}. Snapshot ${snapshotBytes} bytes injected.`,
               priority: 1,
-            },
-            "SessionStart",
-            undefined,
-            { bytesAvoided: 0, bytesReturned: snapshotBytes },
-          );
-        } catch { /* best-effort */ }
-
-        // Legacy resume_completed event retained for back-compat with existing
-        // analytics consumers that filter on `type === 'resume_completed'`.
-        try {
-          db.insertEvent(
-            sessionId,
-            {
+              bytes_returned: snapshotBytes,
+            }, {
               type: "resume_completed",
               category: "session-resume",
               data: `Session resumed from ${source}. Prior events loaded.`,
               priority: 1,
-            },
+            }],
+            input,
+            projectDirResumeMeta,
             "SessionStart",
+            resolveProjectAttributions,
           );
         } catch { /* best-effort */ }
       }
@@ -322,21 +321,41 @@ await runHook(async () => {
       // context at startup, invisible to PostToolUse hooks. We read them from
       // disk so they survive compact/resume via the session events pipeline.
       const sessionId = getSessionId(input);
-      const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+      // v1.0.160: cross-adapter projectDir resolution (was hardcoded CC env).
+      const projectDir = getInputProjectDir(input);
       db.ensureSession(sessionId, projectDir);
       const claudeMdPaths = [
         join(resolveConfigDir(), "CLAUDE.md"),
         join(projectDir, "CLAUDE.md"),
         join(projectDir, ".claude", "CLAUDE.md"),
       ];
+      // v1.0.160: collect rule events into a batch and forward through wire.
+      // Dashboard's "CLAUDE.md adoption" widget COUNTs category='rule' rows on
+      // the platform — without this routing the widget reads 0 no matter how
+      // many CLAUDE.md files actually loaded.
+      const ruleEvents = [];
       for (const p of claudeMdPaths) {
         try {
           const content = readFileSync(p, "utf-8");
           if (content.trim()) {
-            db.insertEvent(sessionId, { type: "rule", category: "rule", data: p, priority: 1 });
-            db.insertEvent(sessionId, { type: "rule_content", category: "rule", data: content, priority: 1 });
+            ruleEvents.push({ type: "rule", category: "rule", data: p, priority: 1 });
+            ruleEvents.push({ type: "rule_content", category: "rule", data: content, priority: 1 });
           }
         } catch { /* file doesn't exist — skip */ }
+      }
+      if (ruleEvents.length > 0) {
+        try {
+          const { resolveProjectAttributions } = await loadProjectAttribution();
+          attributeAndInsertEvents(
+            db,
+            sessionId,
+            ruleEvents,
+            input,
+            projectDir,
+            "SessionStart",
+            resolveProjectAttributions,
+          );
+        } catch { /* best-effort — rule capture must never block start */ }
       }
 
       // Lifecycle anchor for a fresh session — emits BEFORE the CLAUDE.md

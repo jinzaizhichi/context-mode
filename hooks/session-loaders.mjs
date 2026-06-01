@@ -83,13 +83,21 @@ export function attributeAndInsertEvents(db, sessionId, events, input, projectDi
   // no event carries a positive value we leave bytesList undefined so
   // SessionDB falls back to its 0-default for bytes_avoided/bytes_returned
   // — preserves backward compat with older callers / tests.
+  // v1.0.160: handle both bytes_avoided (saved) and bytes_returned (resume
+  // snapshot replay) so the snapshot-consumed event from sessionstart.mjs
+  // routes through here without losing the bytes_returned column.
   let bytesList;
-  if (events.some((e) => typeof e?.bytes_avoided === "number" && e.bytes_avoided > 0)) {
-    bytesList = events.map((e) =>
-      typeof e?.bytes_avoided === "number" && e.bytes_avoided > 0
-        ? { bytesAvoided: e.bytes_avoided }
-        : undefined,
-    );
+  const hasBytes = events.some((e) =>
+    (typeof e?.bytes_avoided === "number" && e.bytes_avoided > 0) ||
+    (typeof e?.bytes_returned === "number" && e.bytes_returned > 0),
+  );
+  if (hasBytes) {
+    bytesList = events.map((e) => {
+      const avoided = typeof e?.bytes_avoided === "number" && e.bytes_avoided > 0 ? e.bytes_avoided : 0;
+      const returned = typeof e?.bytes_returned === "number" && e.bytes_returned > 0 ? e.bytes_returned : 0;
+      if (avoided === 0 && returned === 0) return undefined;
+      return { bytesAvoided: avoided, bytesReturned: returned };
+    });
   }
   // Prefer bulk path (single transaction = single WAL commit). Falls back
   // to per-event insert for older SessionDB instances that lack bulkInsertEvents.
